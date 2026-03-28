@@ -1,8 +1,9 @@
-import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
 import { update } from './update'
+import { processImage, ProcessImageOptions, getImageFileInfo } from './image-processor'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -47,6 +48,7 @@ async function createWindow() {
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
     webPreferences: {
       preload,
+      webSecurity: !VITE_DEV_SERVER_URL, // Allow file:// in dev mode
       // Warning: Enable nodeIntegration and disable contextIsolation is not secure in production
       // nodeIntegration: true,
 
@@ -119,4 +121,43 @@ ipcMain.handle('open-win', (_, arg) => {
   } else {
     childWindow.loadFile(indexHtml, { hash: arg })
   }
+})
+
+// IPC Handlers for Image Processing
+ipcMain.handle('dialog:openFiles', async () => {
+  if (!win) return []
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'avif'] }
+    ]
+  })
+  if (canceled) {
+    return []
+  } else {
+    return filePaths
+  }
+})
+
+ipcMain.handle('dialog:openDirectory', async () => {
+  if (!win) return null
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    properties: ['openDirectory']
+  })
+  if (canceled) {
+    return null
+  } else {
+    return filePaths[0]
+  }
+})
+
+ipcMain.handle('image:process', async (_, inputPath: string, outputDir: string, options: ProcessImageOptions) => {
+  return await processImage(inputPath, outputDir, options)
+})
+
+ipcMain.handle('image:getFileInfo', async (_, inputPath: string) => {
+  if (typeof inputPath !== 'string' || !inputPath) {
+    return null
+  }
+  return await getImageFileInfo(inputPath)
 })

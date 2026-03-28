@@ -1,4 +1,4 @@
-import { ipcRenderer, contextBridge } from 'electron'
+import { ipcRenderer, contextBridge, webUtils } from 'electron'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -18,9 +18,21 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
     const [channel, ...omit] = args
     return ipcRenderer.invoke(channel, ...omit)
   },
+})
 
-  // You can expose other APTs you need here.
-  // ...
+contextBridge.exposeInMainWorld('picafluxAPI', {
+  openFiles: () => ipcRenderer.invoke('dialog:openFiles'),
+  openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+  processImage: (inputPath: string, outputDir: string, options: unknown) =>
+    ipcRenderer.invoke('image:process', inputPath, outputDir, options),
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  getImageFileInfo: (filePath: string) =>
+    ipcRenderer.invoke('image:getFileInfo', filePath) as Promise<{
+      size: number
+      width?: number
+      height?: number
+      format?: string
+    } | null>,
 })
 
 // --------- Preload scripts loading ---------
