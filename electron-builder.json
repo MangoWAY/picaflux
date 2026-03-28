@@ -2,6 +2,11 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "YourAppID",
   "asar": true,
+  "asarUnpack": [
+    "**/node_modules/sharp/**/*",
+    "**/node_modules/onnxruntime-node/**/*",
+    "**/node_modules/@imgly/**/*"
+  ],
   "directories": {
     "output": "release/${version}"
   },

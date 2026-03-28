@@ -25,7 +25,7 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
       <nav className="flex-1 px-4 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon
-          const isActive = activeTab === item.id
+          const isActive = activeTab === item.id && activeTab !== 'settings'
           return (
             <button
               key={item.id}
@@ -45,7 +45,16 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
       </nav>
 
       <div className="p-4">
-        <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium hover:bg-[#2d2d2d] hover:text-white">
+        <button
+          type="button"
+          onClick={() => setActiveTab('settings')}
+          className={clsx(
+            'w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium',
+            activeTab === 'settings'
+              ? 'bg-blue-500/10 text-blue-500'
+              : 'hover:bg-[#2d2d2d] hover:text-white text-gray-300'
+          )}
+        >
           <Settings className="w-5 h-5" />
           Settings
         </button>

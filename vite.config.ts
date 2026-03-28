@@ -5,6 +5,19 @@ import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron/simple'
 import pkg from './package.json'
 
+/** 主进程不要打包进 bundle 的模块（含传递依赖里的 onnxruntime-node 等原生 .node） */
+function isElectronMainExternal(id: string): boolean {
+  if (id === 'electron' || id.startsWith('node:')) return true
+  const deps = Object.keys(pkg.dependencies ?? {})
+  if (deps.includes(id)) return true
+  for (const d of deps) {
+    if (id.startsWith(`${d}/`)) return true
+  }
+  // 任何解析到 node_modules 的路径一律外部化，避免 Rollup/commonjs 处理 .node 动态 require
+  if (/[/\\]node_modules[/\\]/.test(id)) return true
+  return false
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
   rmSync('dist-electron', { recursive: true, force: true })
@@ -38,7 +51,7 @@ export default defineConfig(({ command }) => {
               minify: isBuild,
               outDir: 'dist-electron/main',
               rollupOptions: {
-                external: Object.keys('dependencies' in pkg ? pkg.dependencies : {}),
+                external: isElectronMainExternal,
               },
             },
           },

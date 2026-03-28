@@ -2,6 +2,8 @@ import React, { useState, useCallback } from 'react'
 import { Sidebar } from './Sidebar'
 import { ImageGrid, ImageFile } from './ImageGrid'
 import { SettingsPanel, ProcessOptions } from './SettingsPanel'
+import { AppSettingsPage, BACKGROUND_REMOVAL_BACKEND_STORAGE_KEY } from './AppSettingsPage'
+import { FIXED_WATERMARK_DEFAULTS } from '@/constants/fixedWatermark'
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|avif)$/i
 
@@ -26,10 +28,21 @@ async function buildImageEntries(paths: string[]): Promise<ImageFile[]> {
   return entries
 }
 
+function readStoredBackgroundRemovalBackendId(): string {
+  try {
+    return window.localStorage.getItem(BACKGROUND_REMOVAL_BACKEND_STORAGE_KEY) || 'imgly'
+  } catch {
+    return 'imgly'
+  }
+}
+
 export function ImageWorkbench() {
   const [activeTab, setActiveTab] = useState('image')
   const [images, setImages] = useState<ImageFile[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [backgroundRemovalBackendId, setBackgroundRemovalBackendId] = useState(
+    readStoredBackgroundRemovalBackendId
+  )
   const [options, setOptions] = useState<ProcessOptions>({
     format: 'original',
     width: '',
@@ -37,6 +50,12 @@ export function ImageWorkbench() {
     keepAspectRatio: true,
     quality: 80,
     outputDir: '',
+    removeBackground: false,
+    clearFixedWatermark: false,
+    watermarkLeftPct: FIXED_WATERMARK_DEFAULTS.leftPercent,
+    watermarkTopPct: FIXED_WATERMARK_DEFAULTS.topPercent,
+    watermarkWidthPct: FIXED_WATERMARK_DEFAULTS.widthPercent,
+    watermarkHeightPct: FIXED_WATERMARK_DEFAULTS.heightPercent,
   })
 
   const mergeNewImages = useCallback((newEntries: ImageFile[]) => {
@@ -90,11 +109,52 @@ export function ImageWorkbench() {
     setIsProcessing(true)
     setImages((prev) => prev.map((img) => ({ ...img, status: 'processing' as const })))
 
+    let removalBackendId: string | undefined
+    if (options.removeBackground) {
+      try {
+        const backends = await window.picafluxAPI.listBackgroundRemovalBackends()
+        removalBackendId = backends.some((b) => b.id === backgroundRemovalBackendId)
+          ? backgroundRemovalBackendId
+          : (backends[0]?.id ?? 'imgly')
+      } catch {
+        removalBackendId = backgroundRemovalBackendId || 'imgly'
+      }
+    }
+
+    const parseWatermarkPct = (s: string, fallback: number) => {
+      const n = parseFloat(s)
+      if (!Number.isFinite(n)) return fallback
+      return Math.min(100, Math.max(0, n))
+    }
+    const wmDefaults = {
+      left: parseFloat(FIXED_WATERMARK_DEFAULTS.leftPercent),
+      top: parseFloat(FIXED_WATERMARK_DEFAULTS.topPercent),
+      width: parseFloat(FIXED_WATERMARK_DEFAULTS.widthPercent),
+      height: parseFloat(FIXED_WATERMARK_DEFAULTS.heightPercent),
+    }
+
     const processOpts = {
       format: options.format,
       quality: options.quality,
       width: options.width ? parseInt(options.width, 10) : undefined,
       height: options.height ? parseInt(options.height, 10) : undefined,
+      removeBackground: options.removeBackground,
+      backgroundRemovalBackendId: removalBackendId,
+      clearFixedWatermark: options.clearFixedWatermark,
+      fixedWatermarkRegion: options.clearFixedWatermark
+        ? {
+            leftPercent: parseWatermarkPct(options.watermarkLeftPct, wmDefaults.left),
+            topPercent: parseWatermarkPct(options.watermarkTopPct, wmDefaults.top),
+            widthPercent: Math.max(
+              0.5,
+              parseWatermarkPct(options.watermarkWidthPct, wmDefaults.width)
+            ),
+            heightPercent: Math.max(
+              0.5,
+              parseWatermarkPct(options.watermarkHeightPct, wmDefaults.height)
+            ),
+          }
+        : undefined,
     }
 
     for (const img of batch) {
@@ -124,7 +184,19 @@ export function ImageWorkbench() {
     <div className="flex h-screen w-screen bg-[#121212] overflow-hidden">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {activeTab === 'image' ? (
+      {activeTab === 'settings' ? (
+        <AppSettingsPage
+          backgroundRemovalBackendId={backgroundRemovalBackendId}
+          onBackgroundRemovalBackendIdChange={(id) => {
+            setBackgroundRemovalBackendId(id)
+            try {
+              window.localStorage.setItem(BACKGROUND_REMOVAL_BACKEND_STORAGE_KEY, id)
+            } catch {
+              /* ignore */
+            }
+          }}
+        />
+      ) : activeTab === 'image' ? (
         <>
           <ImageGrid
             images={images}

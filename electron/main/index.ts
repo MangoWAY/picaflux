@@ -1,9 +1,13 @@
-import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
 import { update } from './update'
-import { processImage, ProcessImageOptions, getImageFileInfo } from './image-processor'
+import { processImage, getImageFileInfo, sanitizeProcessImageOptions } from './image-processor'
+import {
+  registerBackgroundRemovalBackends,
+  listBackgroundRemovalBackendMetas,
+} from './background-removal/registry'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -43,8 +47,17 @@ const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
 async function createWindow() {
+  const { width: workW, height: workH } = screen.getPrimaryDisplay().workAreaSize
+  // Image workbench is three columns; target ~90% of work area with sane clamps
+  const width = Math.max(1100, Math.min(1600, Math.floor(workW * 0.92)))
+  const height = Math.max(720, Math.min(1000, Math.floor(workH * 0.9)))
+
   win = new BrowserWindow({
     title: 'PicaFlux',
+    width,
+    height,
+    minWidth: 1024,
+    minHeight: 680,
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
     webPreferences: {
       preload,
@@ -59,10 +72,7 @@ async function createWindow() {
   })
 
   if (VITE_DEV_SERVER_URL) {
-    // #298
     win.loadURL(VITE_DEV_SERVER_URL)
-    // Open devTool if the app is not packaged
-    win.webContents.openDevTools()
   } else {
     win.loadFile(indexHtml)
   }
@@ -81,6 +91,8 @@ async function createWindow() {
   // Auto update
   update(win)
 }
+
+registerBackgroundRemovalBackends()
 
 app.whenReady().then(createWindow)
 
@@ -151,8 +163,11 @@ ipcMain.handle('dialog:openDirectory', async () => {
   }
 })
 
-ipcMain.handle('image:process', async (_, inputPath: string, outputDir: string, options: ProcessImageOptions) => {
-  return await processImage(inputPath, outputDir, options)
+ipcMain.handle('image:process', async (_, inputPath: string, outputDir: string, options: unknown) => {
+  if (typeof inputPath !== 'string' || typeof outputDir !== 'string') {
+    return { success: false, error: 'Invalid path arguments' }
+  }
+  return await processImage(inputPath, outputDir, sanitizeProcessImageOptions(options))
 })
 
 ipcMain.handle('image:getFileInfo', async (_, inputPath: string) => {
@@ -160,4 +175,8 @@ ipcMain.handle('image:getFileInfo', async (_, inputPath: string) => {
     return null
   }
   return await getImageFileInfo(inputPath)
+})
+
+ipcMain.handle('image:listBackgroundRemovalBackends', () => {
+  return listBackgroundRemovalBackendMetas()
 })

@@ -33,6 +33,10 @@ contextBridge.exposeInMainWorld('picafluxAPI', {
       height?: number
       format?: string
     } | null>,
+  listBackgroundRemovalBackends: () =>
+    ipcRenderer.invoke('image:listBackgroundRemovalBackends') as Promise<
+      { id: string; displayName: string }[]
+    >,
 })
 
 // --------- Preload scripts loading ---------

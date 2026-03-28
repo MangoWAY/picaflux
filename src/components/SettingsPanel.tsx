@@ -1,5 +1,5 @@
 import React from 'react'
-import { FolderOpen, Settings2, Play } from 'lucide-react'
+import { FolderOpen, SlidersHorizontal, Play } from 'lucide-react'
 
 export type OutputFormatOption = 'original' | 'png' | 'jpeg' | 'webp' | 'avif'
 
@@ -10,6 +10,12 @@ export interface ProcessOptions {
   keepAspectRatio: boolean
   quality: number
   outputDir: string
+  removeBackground: boolean
+  clearFixedWatermark: boolean
+  watermarkLeftPct: string
+  watermarkTopPct: string
+  watermarkWidthPct: string
+  watermarkHeightPct: string
 }
 
 const OUTPUT_FORMAT_VALUES: OutputFormatOption[] = [
@@ -48,8 +54,8 @@ export function SettingsPanel({
   return (
     <div className="w-80 bg-[#1e1e1e] border-l border-[#2d2d2d] flex flex-col h-full text-gray-300">
       <div className="h-14 border-b border-[#2d2d2d] flex items-center px-5 shrink-0">
-        <Settings2 className="w-5 h-5 mr-2 text-gray-400" />
-        <h2 className="font-semibold text-white">Settings</h2>
+        <SlidersHorizontal className="w-5 h-5 mr-2 text-gray-400" />
+        <h2 className="font-semibold text-white">Processing</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-6">
@@ -121,6 +127,88 @@ export function SettingsPanel({
             onChange={(e) => updateOption('quality', parseInt(e.target.value))}
             className="w-full accent-blue-500"
           />
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-[#2d2d2d] bg-[#181818] p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-gray-300">去除背景</span>
+            <label className="relative inline-flex cursor-pointer items-center shrink-0">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={options.removeBackground}
+                onChange={(e) => updateOption('removeBackground', e.target.checked)}
+              />
+              <div className="h-6 w-11 rounded-full bg-[#3d3d3d] after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:bg-blue-600 peer-checked:after:translate-x-5" />
+            </label>
+          </div>
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-[#2d2d2d] bg-[#181818] p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-gray-300">固定水印区域透明</span>
+            <label className="relative inline-flex cursor-pointer items-center shrink-0">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={options.clearFixedWatermark}
+                onChange={(e) => updateOption('clearFixedWatermark', e.target.checked)}
+              />
+              <div className="h-6 w-11 rounded-full bg-[#3d3d3d] after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:bg-blue-600 peer-checked:after:translate-x-5" />
+            </label>
+          </div>
+          {options.clearFixedWatermark && (
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <label className="text-gray-500">
+                左 %
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={options.watermarkLeftPct}
+                  onChange={(e) => updateOption('watermarkLeftPct', e.target.value)}
+                  className="mt-1 w-full bg-[#121212] border border-[#3d3d3d] rounded px-2 py-1.5 text-sm text-white"
+                />
+              </label>
+              <label className="text-gray-500">
+                上 %
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={options.watermarkTopPct}
+                  onChange={(e) => updateOption('watermarkTopPct', e.target.value)}
+                  className="mt-1 w-full bg-[#121212] border border-[#3d3d3d] rounded px-2 py-1.5 text-sm text-white"
+                />
+              </label>
+              <label className="text-gray-500">
+                宽 %
+                <input
+                  type="number"
+                  min={0.5}
+                  max={100}
+                  step={0.1}
+                  value={options.watermarkWidthPct}
+                  onChange={(e) => updateOption('watermarkWidthPct', e.target.value)}
+                  className="mt-1 w-full bg-[#121212] border border-[#3d3d3d] rounded px-2 py-1.5 text-sm text-white"
+                />
+              </label>
+              <label className="text-gray-500">
+                高 %
+                <input
+                  type="number"
+                  min={0.5}
+                  max={100}
+                  step={0.1}
+                  value={options.watermarkHeightPct}
+                  onChange={(e) => updateOption('watermarkHeightPct', e.target.value)}
+                  className="mt-1 w-full bg-[#121212] border border-[#3d3d3d] rounded px-2 py-1.5 text-sm text-white"
+                />
+              </label>
+            </div>
+          )}
         </div>
 
         {/* Output */}

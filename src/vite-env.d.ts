@@ -22,5 +22,6 @@ interface Window {
       height?: number
       format?: string
     } | null>
+    listBackgroundRemovalBackends: () => Promise<{ id: string; displayName: string }[]>
   }
 }
