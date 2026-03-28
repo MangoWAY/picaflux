@@ -1,0 +1,16 @@
+---
+description: PicaFlux 技术栈、目录与安全边界（Electron + React）
+alwaysApply: true
+---
+
+# PicaFlux 全项目约定
+
+- **栈**：Electron、Vite、`vite-plugin-electron`、React 18、TypeScript、Tailwind。
+- **路径别名**：`@/` → `src/`。
+- **进程划分**：
+  - `electron/main`：主进程（窗口、系统、后续 IPC 实现）。
+  - `electron/preload`：预加载，仅用 `contextBridge` 暴露必要 API。
+  - `src/`：渲染进程，**不**直接使用 Node API。
+- **安全**：默认保持 `contextIsolation`，勿在渲染进程开启 `nodeIntegration`；新增 IPC 时收窄暴露面，避免整包暴露 `ipcRenderer`。
+- **风格**：遵守仓库 ESLint + Prettier；改动保持最小范围。
+- **产品背景**：见 `docs/PRODUCT_PLAN.md`。

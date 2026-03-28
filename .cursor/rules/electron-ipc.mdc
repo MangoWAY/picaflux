@@ -1,0 +1,12 @@
+---
+description: Electron 主进程、预加载与 IPC 修改规范
+globs: electron/**/*.ts
+alwaysApply: false
+---
+
+# Electron 与 IPC
+
+- 在 `ipcMain.handle` / `on` 中校验参数，避免信任渲染进程传入路径或命令。
+- 预加载中暴露的方法应有明确、窄化的类型；优先 `invoke` + 返回值，少用任意 `send`。
+- 需要访问用户文件系统时，在主进程完成；通过 IPC 传递结果或序列化元数据，而非把 `fs` 暴露给前端。
+- 与 MCP 或外部服务通信时，密钥与 token 仅存主进程或安全存储，不进入渲染进程内存或日志。
