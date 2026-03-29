@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('picafluxAPI', {
     ipcRenderer.invoke('image:listBackgroundRemovalBackends') as Promise<
       { id: string; displayName: string }[]
     >,
+  platform: process.platform,
 })
 
 // --------- Preload scripts loading ---------

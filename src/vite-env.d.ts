@@ -23,5 +23,6 @@ interface Window {
       format?: string
     } | null>
     listBackgroundRemovalBackends: () => Promise<{ id: string; displayName: string }[]>
+    platform: NodeJS.Platform
   }
 }

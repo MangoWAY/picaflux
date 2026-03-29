@@ -1,4 +1,13 @@
-import { app, BrowserWindow, shell, ipcMain, dialog, screen } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  shell,
+  ipcMain,
+  dialog,
+  screen,
+  nativeTheme,
+  type BrowserWindowConstructorOptions,
+} from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -52,12 +61,13 @@ async function createWindow() {
   const width = Math.max(1100, Math.min(1600, Math.floor(workW * 0.92)))
   const height = Math.max(720, Math.min(1000, Math.floor(workH * 0.9)))
 
-  win = new BrowserWindow({
+  const winOptions: BrowserWindowConstructorOptions = {
     title: 'PicaFlux',
     width,
     height,
     minWidth: 1024,
     minHeight: 680,
+    backgroundColor: '#121212',
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
     webPreferences: {
       preload,
@@ -69,7 +79,14 @@ async function createWindow() {
       // Read more on https://www.electronjs.org/docs/latest/tutorial/context-isolation
       // contextIsolation: false,
     },
-  })
+  }
+
+  if (process.platform === 'darwin') {
+    winOptions.titleBarStyle = 'hiddenInset'
+    winOptions.trafficLightPosition = { x: 14, y: 12 }
+  }
+
+  win = new BrowserWindow(winOptions)
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
@@ -94,7 +111,10 @@ async function createWindow() {
 
 registerBackgroundRemovalBackends()
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  nativeTheme.themeSource = 'dark'
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   win = null

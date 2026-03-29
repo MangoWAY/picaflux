@@ -13,7 +13,8 @@
   "files": ["dist-electron", "dist"],
   "mac": {
     "artifactName": "${productName}_${version}.${ext}",
-    "target": ["dmg", "zip"]
+    "target": ["dmg", "zip"],
+    "darkModeSupport": true
   },
   "win": {
     "target": [

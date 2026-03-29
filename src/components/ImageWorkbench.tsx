@@ -180,9 +180,18 @@ export function ImageWorkbench() {
     setIsProcessing(false)
   }
 
+  const isMac = window.picafluxAPI.platform === 'darwin'
+
   return (
-    <div className="flex h-screen w-screen bg-[#121212] overflow-hidden">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#121212]">
+      {isMac ? (
+        <div
+          className="h-7 shrink-0 border-b border-[#2d2d2d] bg-[#121212]"
+          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        />
+      ) : null}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {activeTab === 'settings' ? (
         <AppSettingsPage
@@ -218,6 +227,7 @@ export function ImageWorkbench() {
           <p className="text-lg">Module &quot;{activeTab}&quot; is under construction.</p>
         </div>
       )}
+      </div>
     </div>
   )
 }

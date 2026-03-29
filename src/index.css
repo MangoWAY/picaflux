@@ -2,20 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* PicaFlux：统一暗色 UI，避免系统浅色模式下的全局 button 样式把侧栏洗成白底 */
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
+  color-scheme: dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
+  background-color: #121212;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background-color: #121212;
+}
+
+#root {
+  min-height: 100vh;
+  width: 100%;
 }
 
 a {
@@ -24,39 +35,33 @@ a {
   text-decoration: inherit;
 }
 a:hover {
-  color: #535bf2;
+  color: #7c83ff;
 }
 
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
+/* 不设置背景色，交给各组件 Tailwind；避免与 prefers-color-scheme 冲突 */
 button {
   border-radius: 8px;
   border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  font-size: inherit;
+  font-weight: inherit;
+  background-color: transparent;
+  color: inherit;
   cursor: pointer;
-  transition: border-color 0.25s;
 }
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
+
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  outline: 2px solid rgb(59 130 246 / 0.6);
+  outline-offset: 2px;
+}
+
+/* macOS hiddenInset 标题栏拖拽区内，控件需可点击 */
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-app-region: no-drag;
 }
 
 code {
@@ -64,31 +69,4 @@ code {
   padding: 2px 4px;
   margin: 0 4px;
   border-radius: 4px;
-}
-
-.card {
-  padding: 2em;
-}
-
-#app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
-  code {
-    background-color: #f9f9f9;
-  }
 }
