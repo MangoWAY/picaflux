@@ -49,5 +49,32 @@ interface Window {
     subscribeVideoTaskProgress: (
       callback: (payload: { taskId: string; percent: number }) => void,
     ) => () => void
+    open3dFiles: () => Promise<string[]>
+    getModel3dFileInfo: (filePath: string) => Promise<{
+      size: number
+      extension: string
+      meshCount: number
+      materialCount: number
+      textureCount: number
+      animationCount: number
+    } | null>
+    save3dThumbnail: (
+      inputPath: string,
+      outputDir: string,
+      pngBase64: string,
+    ) => Promise<{
+      success: boolean
+      outputPath?: string
+      error?: string
+    }>
+    convert3dModel: (
+      inputPath: string,
+      outputDir: string,
+      options: unknown,
+    ) => Promise<{
+      success: boolean
+      outputPath?: string
+      error?: string
+    }>
   }
 }

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { ImageWorkbench } from './ImageWorkbench'
 import { VideoWorkbench } from './VideoWorkbench'
+import { ThreeWorkbench } from './ThreeWorkbench'
 import { AppSettingsPage, BACKGROUND_REMOVAL_BACKEND_STORAGE_KEY } from './AppSettingsPage'
 
 function readStoredBackgroundRemovalBackendId(): string {
@@ -46,6 +47,8 @@ export function MainWorkbench() {
           <ImageWorkbench backgroundRemovalBackendId={backgroundRemovalBackendId} />
         ) : activeTab === 'video' ? (
           <VideoWorkbench />
+        ) : activeTab === '3d' ? (
+          <ThreeWorkbench />
         ) : (
           <div className="flex flex-1 items-center justify-center text-gray-500">
             <p className="text-lg">Module &quot;{activeTab}&quot; is under construction.</p>

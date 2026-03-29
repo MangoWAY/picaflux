@@ -14,6 +14,7 @@ import os from 'node:os'
 import { update } from './update'
 import { processImage, getImageFileInfo, sanitizeProcessImageOptions } from './image-processor'
 import { processVideo, getVideoFileInfo, cancelVideoTask } from './video-processor'
+import { getModel3dFileInfo, save3dThumbnailPng, processGlbConvert } from './gltf-3d-processor'
 import {
   registerBackgroundRemovalBackends,
   listBackgroundRemovalBackendMetas,
@@ -237,4 +238,41 @@ ipcMain.handle('video:getFileInfo', async (_, inputPath: string) => {
 ipcMain.handle('video:cancel', (_, taskId: string) => {
   if (typeof taskId !== 'string') return false
   return cancelVideoTask(taskId)
+})
+
+const MODEL_3D_EXT = ['glb', 'gltf'] as const
+
+ipcMain.handle('dialog:open3dFiles', async () => {
+  if (!win) return []
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'glTF', extensions: [...MODEL_3D_EXT] }],
+  })
+  return canceled ? [] : filePaths
+})
+
+ipcMain.handle('3d:getFileInfo', async (_, inputPath: string) => {
+  if (typeof inputPath !== 'string' || !inputPath) return null
+  return await getModel3dFileInfo(inputPath)
+})
+
+ipcMain.handle(
+  '3d:saveThumbnail',
+  async (_, inputPath: string, outputDir: string, pngBase64: string) => {
+    if (
+      typeof inputPath !== 'string' ||
+      typeof outputDir !== 'string' ||
+      typeof pngBase64 !== 'string'
+    ) {
+      return { success: false, error: 'Invalid arguments' }
+    }
+    return await save3dThumbnailPng(inputPath, outputDir, pngBase64)
+  },
+)
+
+ipcMain.handle('3d:convert', async (_, inputPath: string, outputDir: string, options: unknown) => {
+  if (typeof inputPath !== 'string' || typeof outputDir !== 'string') {
+    return { success: false, error: 'Invalid path arguments' }
+  }
+  return await processGlbConvert(inputPath, outputDir, options)
 })

@@ -56,6 +56,28 @@ contextBridge.exposeInMainWorld('picafluxAPI', {
       ipcRenderer.removeListener('video:taskProgress', handler)
     }
   },
+  open3dFiles: () => ipcRenderer.invoke('dialog:open3dFiles') as Promise<string[]>,
+  getModel3dFileInfo: (filePath: string) =>
+    ipcRenderer.invoke('3d:getFileInfo', filePath) as Promise<{
+      size: number
+      extension: string
+      meshCount: number
+      materialCount: number
+      textureCount: number
+      animationCount: number
+    } | null>,
+  save3dThumbnail: (inputPath: string, outputDir: string, pngBase64: string) =>
+    ipcRenderer.invoke('3d:saveThumbnail', inputPath, outputDir, pngBase64) as Promise<{
+      success: boolean
+      outputPath?: string
+      error?: string
+    }>,
+  convert3dModel: (inputPath: string, outputDir: string, options: unknown) =>
+    ipcRenderer.invoke('3d:convert', inputPath, outputDir, options) as Promise<{
+      success: boolean
+      outputPath?: string
+      error?: string
+    }>,
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   getImageFileInfo: (filePath: string) =>
     ipcRenderer.invoke('image:getFileInfo', filePath) as Promise<{

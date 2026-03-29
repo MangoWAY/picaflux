@@ -2,6 +2,7 @@ dist
 dist-electron
 node_modules
 release
+public/draco
 pnpm-lock.yaml
 package-lock.json
 *.min.js

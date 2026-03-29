@@ -11,6 +11,7 @@ export default tseslint.config(
       'dist/**',
       'dist-electron/**',
       'node_modules/**',
+      'public/draco/**',
       'release/**',
       '.vscode/**',
       'postcss.config.cjs',

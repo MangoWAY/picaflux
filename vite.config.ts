@@ -32,6 +32,9 @@ export default defineConfig(({ command }) => {
         '@': path.join(__dirname, 'src'),
       },
     },
+    optimizeDeps: {
+      include: ['three', '@react-three/fiber', '@react-three/drei', 'three-stdlib'],
+    },
     plugins: [
       react(),
       electron({
