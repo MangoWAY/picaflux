@@ -20,8 +20,18 @@ export type FixedWatermarkRegionPercent = {
 
 export interface ProcessImageOptions {
   format?: 'original' | 'png' | 'jpeg' | 'webp' | 'avif'
+  /** 顺时针 90° 的倍数，仅取 0–3 */
+  rotateQuarterTurns?: number
+  /** 水平镜像（左右翻转），对应 sharp flop */
+  flipHorizontal?: boolean
+  /** 垂直镜像（上下翻转），对应 sharp flip */
+  flipVertical?: boolean
   width?: number
   height?: number
+  /** 像素缩放时是否保持比例（inside）；为 false 时尽量按给定宽高拉伸 */
+  keepAspectRatio?: boolean
+  /** 相对当前图像宽高的缩放百分比（1–400），与 width/height 互斥；100 表示不缩放 */
+  scalePercent?: number
   quality?: number // 1-100
   /** 为 true 时先走抠图后端，再走 sharp（输出仍由 format/quality 等决定；JPEG 会丢失透明） */
   removeBackground?: boolean
@@ -57,9 +67,12 @@ function sanitizeFixedWatermarkRegion(raw: unknown): FixedWatermarkRegionPercent
 /** 将指定百分比矩形内 alpha 清零，输出 PNG buffer 供后续 sharp 管线使用 */
 async function applyFixedWatermarkTransparency(
   input: string | Buffer,
-  region: FixedWatermarkRegionPercent
+  region: FixedWatermarkRegionPercent,
 ): Promise<Buffer> {
-  const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const { data, info } = await sharp(input)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
   const w = info.width ?? 0
   const h = info.height ?? 0
   const channels = info.channels ?? 0
@@ -81,7 +94,9 @@ async function applyFixedWatermarkTransparency(
       buf[i + 3] = 0
     }
   }
-  return sharp(buf, { raw: { width: w, height: h, channels: 4 } }).png().toBuffer()
+  return sharp(buf, { raw: { width: w, height: h, channels: 4 } })
+    .png()
+    .toBuffer()
 }
 
 const FORMAT_VALUES = ['original', 'png', 'jpeg', 'webp', 'avif'] as const
@@ -104,6 +119,15 @@ export function sanitizeProcessImageOptions(raw: unknown): ProcessImageOptions {
     typeof o.height === 'number' && Number.isFinite(o.height) && o.height > 0
       ? Math.min(65535, Math.floor(o.height))
       : undefined
+  const hasPixelResize = (width ?? 0) > 0 || (height ?? 0) > 0
+
+  let scalePercent: number | undefined
+  if (!hasPixelResize && typeof o.scalePercent === 'number' && Number.isFinite(o.scalePercent)) {
+    const p = Math.round(o.scalePercent)
+    const clamped = Math.min(400, Math.max(1, p))
+    if (clamped !== 100) scalePercent = clamped
+  }
+
   const quality =
     typeof o.quality === 'number' && Number.isFinite(o.quality)
       ? Math.min(100, Math.max(1, Math.round(o.quality)))
@@ -118,11 +142,22 @@ export function sanitizeProcessImageOptions(raw: unknown): ProcessImageOptions {
   const fixedWatermarkRegion = clearFixedWatermark
     ? sanitizeFixedWatermarkRegion(o.fixedWatermarkRegion)
     : undefined
+  let rotateQuarterTurns: number | undefined
+  if (typeof o.rotateQuarterTurns === 'number' && Number.isFinite(o.rotateQuarterTurns)) {
+    const n = Math.floor(o.rotateQuarterTurns) % 4
+    rotateQuarterTurns = n < 0 ? n + 4 : n
+    if (rotateQuarterTurns === 0) rotateQuarterTurns = undefined
+  }
 
   return {
     format,
+    rotateQuarterTurns,
+    flipHorizontal: o.flipHorizontal === true,
+    flipVertical: o.flipVertical === true,
     width,
     height,
+    keepAspectRatio: o.keepAspectRatio !== false,
+    scalePercent,
     quality,
     removeBackground: o.removeBackground === true,
     backgroundRemovalBackendId,
@@ -163,7 +198,7 @@ export async function getImageFileInfo(inputPath: string): Promise<ImageFileInfo
 export async function processImage(
   inputPath: string,
   outputDir: string,
-  options: ProcessImageOptions
+  options: ProcessImageOptions,
 ): Promise<ProcessImageResult> {
   try {
     // Ensure output directory exists
@@ -206,8 +241,7 @@ export async function processImage(
 
     if (options.clearFixedWatermark) {
       try {
-        const region =
-          options.fixedWatermarkRegion ?? { ...DEFAULT_FIXED_WATERMARK_REGION_PERCENT }
+        const region = options.fixedWatermarkRegion ?? { ...DEFAULT_FIXED_WATERMARK_REGION_PERCENT }
         pipelineInput = await applyFixedWatermarkTransparency(pipelineInput, region)
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Watermark region clear failed'
@@ -218,14 +252,50 @@ export async function processImage(
 
     let pipeline = sharp(pipelineInput)
 
-    // Resize
-    if (options.width || options.height) {
+    const rq =
+      typeof options.rotateQuarterTurns === 'number' && Number.isFinite(options.rotateQuarterTurns)
+        ? ((((Math.floor(options.rotateQuarterTurns) % 4) + 4) % 4) as 0 | 1 | 2 | 3)
+        : 0
+    if (rq !== 0) {
+      pipeline = pipeline.rotate(rq * 90)
+    }
+    if (options.flipHorizontal === true) {
+      pipeline = pipeline.flop()
+    }
+    if (options.flipVertical === true) {
+      pipeline = pipeline.flip()
+    }
+
+    // Resize：优先像素尺寸；否则按比例缩放
+    const hasPixelResize =
+      (typeof options.width === 'number' && options.width > 0) ||
+      (typeof options.height === 'number' && options.height > 0)
+
+    if (hasPixelResize) {
+      const keepAR = options.keepAspectRatio !== false
       pipeline = pipeline.resize({
         width: options.width,
         height: options.height,
-        fit: 'inside', // Keep aspect ratio by default
-        withoutEnlargement: true, // Don't upscale
+        fit: keepAR ? 'inside' : 'fill',
+        withoutEnlargement: true,
       })
+    } else if (
+      typeof options.scalePercent === 'number' &&
+      Number.isFinite(options.scalePercent) &&
+      options.scalePercent !== 100
+    ) {
+      const p = Math.min(400, Math.max(1, Math.round(options.scalePercent)))
+      const meta = await pipeline.metadata()
+      const w0 = meta.width
+      const h0 = meta.height
+      if (w0 && h0) {
+        const factor = p / 100
+        const newW = Math.max(1, Math.round(w0 * factor))
+        pipeline = pipeline.resize({
+          width: newW,
+          withoutEnlargement: p <= 100,
+        })
+      }
     }
 
     // Format & Quality
@@ -249,7 +319,7 @@ export async function processImage(
 
     return {
       success: true,
-      outputPath
+      outputPath,
     }
   } catch (error: unknown) {
     console.error('Error processing image:', error)

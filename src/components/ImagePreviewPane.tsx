@@ -1,8 +1,32 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { UploadCloud, FileImage } from 'lucide-react'
 import type { ImageFile } from './ImageStrip'
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|avif)$/i
+
+/** 与导出时 fixedWatermarkRegion 百分比语义一致（相对原图宽高） */
+export type FixedWatermarkRegionPercent = {
+  leftPercent: number
+  topPercent: number
+  widthPercent: number
+  heightPercent: number
+}
+
+function pixelRectFromWatermarkPercent(
+  region: FixedWatermarkRegionPercent,
+  w: number,
+  h: number,
+): { x: number; y: number; width: number; height: number } {
+  let left = Math.round((region.leftPercent / 100) * w)
+  let top = Math.round((region.topPercent / 100) * h)
+  let rw = Math.round((region.widthPercent / 100) * w)
+  let rh = Math.round((region.heightPercent / 100) * h)
+  left = Math.max(0, Math.min(w - 1, left))
+  top = Math.max(0, Math.min(h - 1, top))
+  rw = Math.max(1, Math.min(w - left, rw))
+  rh = Math.max(1, Math.min(h - top, rh))
+  return { x: left, y: top, width: rw, height: rh }
+}
 
 interface ImagePreviewPaneProps {
   images: ImageFile[]
@@ -10,6 +34,12 @@ interface ImagePreviewPaneProps {
   selectedCount: number
   onAddImages: () => void
   onDropPaths: (paths: string[]) => void
+  /** 累计 90° 步数（与右侧一致）；预览用 steps×90°，避免 270°→0° 时 CSS 沿长弧插值 */
+  rotateQuarterTurns: number
+  flipHorizontal: boolean
+  flipVertical: boolean
+  /** 开启「固定水印区域透明」时预览标出矩形（百分比与导出一致） */
+  fixedWatermarkRegionPercent: FixedWatermarkRegionPercent | null
 }
 
 function formatFormatLabel(format?: string): string {
@@ -33,6 +63,10 @@ export function ImagePreviewPane({
   selectedCount,
   onAddImages,
   onDropPaths,
+  rotateQuarterTurns,
+  flipHorizontal,
+  flipVertical,
+  fixedWatermarkRegionPercent,
 }: ImagePreviewPaneProps) {
   const collectPathsFromDataTransfer = useCallback((dt: DataTransfer): string[] => {
     const paths: string[] = []
@@ -77,6 +111,70 @@ export function ImagePreviewPane({
       : '—'
   const fmt = formatFormatLabel(previewImage?.format) || '—'
 
+  const rotateDeg = rotateQuarterTurns * 90
+  const prevRotateDegRef = useRef(rotateDeg)
+  const rotateDelta = Math.abs(rotateDeg - prevRotateDegRef.current)
+  const transformTransition =
+    rotateDelta > 180 ? 'none' : 'transform 0.2s ease'
+
+  useLayoutEffect(() => {
+    prevRotateDegRef.current = rotateDeg
+  }, [rotateDeg])
+
+  const previewTransformStyle: React.CSSProperties = {
+    transform: `rotate(${rotateDeg}deg) scaleX(${flipHorizontal ? -1 : 1}) scaleY(${flipVertical ? -1 : 1})`,
+    transition: transformTransition,
+  }
+
+  const previewSrc = previewImage?.previewUrl
+
+  const imgRef = useRef<HTMLImageElement>(null)
+  const [imgLayout, setImgLayout] = useState<{ scale: number; ox: number; oy: number } | null>(null)
+
+  const updateImgLayout = useCallback(() => {
+    const el = imgRef.current
+    if (!el || !previewSrc) {
+      setImgLayout(null)
+      return
+    }
+    const nw = el.naturalWidth
+    const nh = el.naturalHeight
+    if (!nw || !nh) {
+      setImgLayout(null)
+      return
+    }
+    const ew = el.offsetWidth
+    const eh = el.offsetHeight
+    if (!ew || !eh) {
+      setImgLayout(null)
+      return
+    }
+    const scale = Math.min(ew / nw, eh / nh)
+    const dw = nw * scale
+    const dh = nh * scale
+    setImgLayout({ scale, ox: (ew - dw) / 2, oy: (eh - dh) / 2 })
+  }, [previewSrc])
+
+  useLayoutEffect(() => {
+    updateImgLayout()
+  }, [updateImgLayout, rotateDeg, flipHorizontal, flipVertical, fixedWatermarkRegionPercent])
+
+  useEffect(() => {
+    const el = imgRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => updateImgLayout())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [updateImgLayout])
+
+  const nw = imgRef.current?.naturalWidth || previewImage?.width || 0
+  const nh = imgRef.current?.naturalHeight || previewImage?.height || 0
+
+  const fixedWatermarkPixelRect =
+    fixedWatermarkRegionPercent && nw > 0 && nh > 0
+      ? pixelRectFromWatermarkPercent(fixedWatermarkRegionPercent, nw, nh)
+      : null
+
   return (
     <div
       className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#121212]"
@@ -114,15 +212,38 @@ export function ImagePreviewPane({
             <p className="text-sm">或点击右上角「Add Images」</p>
           </div>
         ) : previewImage ? (
-          <div className="flex h-full min-h-0 flex-col gap-4">
+          <div className="flex h-full min-h-0 flex-col gap-3">
             <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#1a1a1a]">
-              <div className="flex h-full items-center justify-center p-4">
-                {previewImage.previewUrl ? (
-                  <img
-                    src={previewImage.previewUrl}
-                    alt={previewImage.name}
-                    className="max-h-full max-w-full object-contain"
-                  />
+              <div className="relative flex h-full min-h-0 w-full min-w-0 items-center justify-center p-4">
+                {previewSrc ? (
+                  <div
+                    className="relative flex max-h-full max-w-full min-h-0 min-w-0"
+                    style={previewTransformStyle}
+                  >
+                    <img
+                      ref={imgRef}
+                      src={previewSrc}
+                      alt={previewImage.name}
+                      onLoad={updateImgLayout}
+                      className="block h-auto w-auto max-h-full max-w-full object-contain"
+                    />
+                    {fixedWatermarkPixelRect && imgLayout ? (
+                      <div
+                        className="pointer-events-none absolute z-10 box-border border-2 border-dashed border-sky-400/95 bg-sky-400/15 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+                        style={{
+                          left: imgLayout.ox + fixedWatermarkPixelRect.x * imgLayout.scale,
+                          top: imgLayout.oy + fixedWatermarkPixelRect.y * imgLayout.scale,
+                          width: fixedWatermarkPixelRect.width * imgLayout.scale,
+                          height: fixedWatermarkPixelRect.height * imgLayout.scale,
+                        }}
+                        title="导出时「固定水印区域透明」将清除此矩形内 alpha"
+                      >
+                        <span className="absolute left-0 top-0 whitespace-nowrap rounded-br bg-black/70 px-1 py-0.5 text-[10px] font-medium text-sky-100">
+                          固定透明区域
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : (
                   <FileImage className="h-24 w-24 text-gray-600" />
                 )}

@@ -26,10 +26,10 @@
   },
   "dependencies": {
     "@imgly/background-removal-node": "^1.4.5",
-    "onnxruntime-node": "~1.17.3",
     "clsx": "^2.1.1",
     "electron-updater": "^6.3.9",
     "lucide-react": "^1.7.0",
+    "onnxruntime-node": "~1.17.3",
     "sharp": "^0.34.5",
     "tailwind-merge": "^3.5.0"
   },

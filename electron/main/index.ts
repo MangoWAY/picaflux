@@ -17,7 +17,6 @@ import {
   registerBackgroundRemovalBackends,
   listBackgroundRemovalBackendMetas,
 } from './background-removal/registry'
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -160,9 +159,7 @@ ipcMain.handle('dialog:openFiles', async () => {
   if (!win) return []
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
     properties: ['openFile', 'multiSelections'],
-    filters: [
-      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'avif'] }
-    ]
+    filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'avif'] }],
   })
   if (canceled) {
     return []
@@ -174,7 +171,7 @@ ipcMain.handle('dialog:openFiles', async () => {
 ipcMain.handle('dialog:openDirectory', async () => {
   if (!win) return null
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-    properties: ['openDirectory']
+    properties: ['openDirectory'],
   })
   if (canceled) {
     return null
@@ -183,12 +180,15 @@ ipcMain.handle('dialog:openDirectory', async () => {
   }
 })
 
-ipcMain.handle('image:process', async (_, inputPath: string, outputDir: string, options: unknown) => {
-  if (typeof inputPath !== 'string' || typeof outputDir !== 'string') {
-    return { success: false, error: 'Invalid path arguments' }
-  }
-  return await processImage(inputPath, outputDir, sanitizeProcessImageOptions(options))
-})
+ipcMain.handle(
+  'image:process',
+  async (_, inputPath: string, outputDir: string, options: unknown) => {
+    if (typeof inputPath !== 'string' || typeof outputDir !== 'string') {
+      return { success: false, error: 'Invalid path arguments' }
+    }
+    return await processImage(inputPath, outputDir, sanitizeProcessImageOptions(options))
+  },
+)
 
 ipcMain.handle('image:getFileInfo', async (_, inputPath: string) => {
   if (typeof inputPath !== 'string' || !inputPath) {

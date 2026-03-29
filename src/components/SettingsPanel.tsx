@@ -1,10 +1,34 @@
 import React from 'react'
-import { FolderOpen, SlidersHorizontal, Play } from 'lucide-react'
+import clsx from 'clsx'
+import {
+  FolderOpen,
+  SlidersHorizontal,
+  Play,
+  RotateCcw,
+  RotateCw,
+  FlipHorizontal,
+  FlipVertical,
+  ChevronDown,
+} from 'lucide-react'
 
 export type OutputFormatOption = 'original' | 'png' | 'jpeg' | 'webp' | 'avif'
 
+/** none：不按比例缩放；再点同一百分比可回到 none */
+export type ResizePercentPreset = 'none' | 'p75' | 'p50' | 'p25' | 'custom'
+
 export interface ProcessOptions {
   format: OutputFormatOption
+  /** 累计 90° 步数（可正可负、不取模），导出时对 4 取模；预览用此值算角度以保证动画走最短弧 */
+  rotateQuarterTurns: number
+  flipHorizontal: boolean
+  flipVertical: boolean
+  /** 百分比缩放与像素缩放二选一 */
+  resizeMode: 'percent' | 'pixels'
+  resizePercentPreset: ResizePercentPreset
+  /** 选择「自定义」时的百分比字符串，1–400 */
+  resizeCustomPercentStr: string
+  /** 像素输入区是否展开 */
+  resizePixelsExpanded: boolean
   width: string
   height: string
   keepAspectRatio: boolean
@@ -22,6 +46,32 @@ const OUTPUT_FORMAT_VALUES: OutputFormatOption[] = ['original', 'png', 'jpeg', '
 
 function isOutputFormatOption(v: string): v is OutputFormatOption {
   return (OUTPUT_FORMAT_VALUES as readonly string[]).includes(v)
+}
+
+/** iOS 风格开关：必须为 ::after 设置 content，否则滑块不显示 */
+function PanelToggle({
+  checked,
+  onChange,
+  ariaLabel,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  ariaLabel: string
+}) {
+  return (
+    <label className="inline-flex shrink-0 cursor-pointer items-center">
+      <input
+        type="checkbox"
+        role="switch"
+        aria-checked={checked}
+        aria-label={ariaLabel}
+        className="peer sr-only"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span className="relative h-6 w-11 shrink-0 rounded-full bg-[#3d3d3d] transition-colors after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform after:content-[''] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-blue-500/80 peer-checked:bg-blue-600 peer-checked:after:translate-x-5" />
+    </label>
+  )
 }
 
 interface SettingsPanelProps {
@@ -49,8 +99,8 @@ export function SettingsPanel({
   }
 
   return (
-    <div className="w-80 bg-[#1e1e1e] border-l border-[#2d2d2d] flex flex-col h-full text-gray-300">
-      <div className="h-14 shrink-0 flex flex-col justify-center border-b border-[#2d2d2d] px-5">
+    <div className="flex h-full min-h-0 w-[min(100%,22rem)] shrink-0 flex-col border-l border-[#2d2d2d] bg-[#1e1e1e] text-gray-300">
+      <div className="h-14 shrink-0 flex flex-col justify-center border-b border-[#2d2d2d] px-4">
         <div className="flex items-center">
           <SlidersHorizontal className="mr-2 h-5 w-5 text-gray-400" />
           <h2 className="font-semibold text-white">Processing</h2>
@@ -62,7 +112,7 @@ export function SettingsPanel({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5 space-y-6">
+      <div className="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-4 py-4">
         {/* Format */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-gray-400">Format</label>
@@ -82,39 +132,202 @@ export function SettingsPanel({
           </select>
         </div>
 
-        {/* Resize */}
-        <div className="space-y-3">
-          <label className="text-sm font-medium text-gray-400">Resize (px)</label>
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <input
-                type="number"
-                placeholder="Width"
-                value={options.width}
-                onChange={(e) => updateOption('width', e.target.value)}
-                className="w-full bg-[#121212] border border-[#3d3d3d] rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 placeholder-gray-600"
-              />
-            </div>
-            <span className="text-gray-500">×</span>
-            <div className="flex-1">
-              <input
-                type="number"
-                placeholder="Height"
-                value={options.height}
-                onChange={(e) => updateOption('height', e.target.value)}
-                className="w-full bg-[#121212] border border-[#3d3d3d] rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 placeholder-gray-600"
-              />
-            </div>
+        {/* 旋转与镜像（与中间预览、导出管线一致） */}
+        <div className="space-y-3 rounded-lg border border-[#2d2d2d] bg-[#181818] p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-gray-300">旋转与镜像</span>
+            <button
+              type="button"
+              onClick={() =>
+                onChange({
+                  ...options,
+                  rotateQuarterTurns: 0,
+                  flipHorizontal: false,
+                  flipVertical: false,
+                })
+              }
+              className="text-xs text-blue-400 hover:text-blue-300"
+            >
+              重置
+            </button>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={options.keepAspectRatio}
-              onChange={(e) => updateOption('keepAspectRatio', e.target.checked)}
-              className="rounded bg-[#121212] border-[#3d3d3d] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
-            />
-            <span className="text-sm text-gray-400">Keep Aspect Ratio</span>
-          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              title="逆时针 90°"
+              onClick={() => updateOption('rotateQuarterTurns', options.rotateQuarterTurns - 1)}
+              className="flex items-center justify-center gap-2 rounded-md border border-[#3d3d3d] bg-[#121212] px-2 py-2 text-xs text-gray-200 transition-colors hover:border-blue-500/50 hover:bg-[#1e1e1e]"
+            >
+              <RotateCcw className="h-4 w-4 shrink-0" />
+              左转 90°
+            </button>
+            <button
+              type="button"
+              title="顺时针 90°"
+              onClick={() => updateOption('rotateQuarterTurns', options.rotateQuarterTurns + 1)}
+              className="flex items-center justify-center gap-2 rounded-md border border-[#3d3d3d] bg-[#121212] px-2 py-2 text-xs text-gray-200 transition-colors hover:border-blue-500/50 hover:bg-[#1e1e1e]"
+            >
+              <RotateCw className="h-4 w-4 shrink-0" />
+              右转 90°
+            </button>
+            <button
+              type="button"
+              title="水平镜像"
+              onClick={() => updateOption('flipHorizontal', !options.flipHorizontal)}
+              className={`flex items-center justify-center gap-2 rounded-md border px-2 py-2 text-xs transition-colors ${
+                options.flipHorizontal
+                  ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
+                  : 'border-[#3d3d3d] bg-[#121212] text-gray-200 hover:border-blue-500/50 hover:bg-[#1e1e1e]'
+              }`}
+            >
+              <FlipHorizontal className="h-4 w-4 shrink-0" />
+              水平镜像
+            </button>
+            <button
+              type="button"
+              title="垂直镜像"
+              onClick={() => updateOption('flipVertical', !options.flipVertical)}
+              className={`flex items-center justify-center gap-2 rounded-md border px-2 py-2 text-xs transition-colors ${
+                options.flipVertical
+                  ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
+                  : 'border-[#3d3d3d] bg-[#121212] text-gray-200 hover:border-blue-500/50 hover:bg-[#1e1e1e]'
+              }`}
+            >
+              <FlipVertical className="h-4 w-4 shrink-0" />
+              垂直镜像
+            </button>
+          </div>
+        </div>
+
+        {/* 缩放：百分比 与 像素互斥 */}
+        <div className="min-w-0 space-y-3">
+          <label className="text-sm font-medium text-gray-400">缩放</label>
+          <p className="text-[11px] leading-relaxed text-gray-500">
+            百分比与下方像素二选一；同一比例再点一次可取消缩放。
+          </p>
+          <div className="grid min-w-0 grid-cols-3 gap-2">
+            {(
+              [
+                { preset: 'p75' as const, label: '75%' },
+                { preset: 'p50' as const, label: '50%' },
+                { preset: 'p25' as const, label: '25%' },
+              ] as const
+            ).map(({ preset, label }) => {
+              const active =
+                options.resizeMode === 'percent' && options.resizePercentPreset === preset
+              return (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => {
+                    const turnOff = active
+                    onChange({
+                      ...options,
+                      resizeMode: 'percent',
+                      resizePercentPreset: turnOff ? 'none' : preset,
+                      resizePixelsExpanded: false,
+                    })
+                  }}
+                  className={clsx(
+                    'min-w-0 rounded-md border py-2 text-center text-xs font-medium transition-colors',
+                    active
+                      ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
+                      : 'border-[#3d3d3d] bg-[#121212] text-gray-300 hover:border-blue-500/40 hover:bg-[#1e1e1e]',
+                  )}
+                >
+                  {label}
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              onClick={() => {
+                const active =
+                  options.resizeMode === 'percent' && options.resizePercentPreset === 'custom'
+                onChange({
+                  ...options,
+                  resizeMode: 'percent',
+                  resizePercentPreset: active ? 'none' : 'custom',
+                  resizePixelsExpanded: false,
+                })
+              }}
+              className={clsx(
+                'col-span-3 rounded-md border py-2 text-center text-xs font-medium transition-colors',
+                options.resizeMode === 'percent' && options.resizePercentPreset === 'custom'
+                  ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
+                  : 'border-[#3d3d3d] bg-[#121212] text-gray-300 hover:border-blue-500/40 hover:bg-[#1e1e1e]',
+              )}
+            >
+              自定义比例
+            </button>
+          </div>
+          {options.resizeMode === 'percent' && options.resizePercentPreset === 'custom' && (
+            <div className="flex min-w-0 items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={400}
+                step={1}
+                value={options.resizeCustomPercentStr}
+                onChange={(e) => updateOption('resizeCustomPercentStr', e.target.value)}
+                className="min-w-0 max-w-full flex-1 rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+              />
+              <span className="shrink-0 text-sm text-gray-500">%</span>
+            </div>
+          )}
+
+          <div className="min-w-0 overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#181818]">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !options.resizePixelsExpanded
+                onChange({
+                  ...options,
+                  resizePixelsExpanded: next,
+                  resizeMode: next ? 'pixels' : 'percent',
+                })
+              }}
+              className="flex w-full min-w-0 items-center justify-between gap-2 px-3 py-2.5 text-left text-sm text-gray-200 transition-colors hover:bg-[#222]"
+            >
+              <span className="min-w-0 truncate">指定宽高 (px)</span>
+              <ChevronDown
+                className={clsx(
+                  'h-4 w-4 shrink-0 text-gray-500 transition-transform',
+                  options.resizePixelsExpanded && 'rotate-180',
+                )}
+              />
+            </button>
+            {options.resizePixelsExpanded && (
+              <div className="min-w-0 space-y-3 border-t border-[#2d2d2d] px-3 pb-3 pt-3">
+                <div className="grid min-w-0 grid-cols-[1fr_auto_1fr] items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="宽"
+                    value={options.width}
+                    onChange={(e) => updateOption('width', e.target.value)}
+                    className="min-w-0 max-w-full rounded-md border border-[#3d3d3d] bg-[#121212] px-2 py-2 text-sm text-white placeholder-gray-600 focus:border-blue-500 focus:outline-none"
+                  />
+                  <span className="shrink-0 px-0.5 text-center text-gray-500">×</span>
+                  <input
+                    type="number"
+                    placeholder="高"
+                    value={options.height}
+                    onChange={(e) => updateOption('height', e.target.value)}
+                    className="min-w-0 max-w-full rounded-md border border-[#3d3d3d] bg-[#121212] px-2 py-2 text-sm text-white placeholder-gray-600 focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={options.keepAspectRatio}
+                    onChange={(e) => updateOption('keepAspectRatio', e.target.checked)}
+                    className="rounded border-[#3d3d3d] bg-[#121212] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-gray-400">保持宽高比</span>
+                </label>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Quality */}
@@ -133,86 +346,86 @@ export function SettingsPanel({
           />
         </div>
 
-        <div className="space-y-3 rounded-lg border border-[#2d2d2d] bg-[#181818] p-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium text-gray-300">去除背景</span>
-            <label className="relative inline-flex cursor-pointer items-center shrink-0">
-              <input
-                type="checkbox"
-                className="peer sr-only"
+        <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
+          <div className="border-b border-[#2d2d2d] px-3 py-2">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">图像处理</p>
+            <p className="mt-0.5 text-[10px] leading-snug text-gray-600">导出时按顺序应用；中间预览可显示固定透明区域</p>
+          </div>
+          <div className="divide-y divide-[#2d2d2d]">
+            <div className="flex items-center justify-between gap-3 px-3 py-3">
+              <div className="min-w-0">
+                <span className="text-sm font-medium text-gray-200">去除背景</span>
+                <p className="mt-0.5 text-[10px] text-gray-500">先抠图再应用下方水印选项</p>
+              </div>
+              <PanelToggle
                 checked={options.removeBackground}
-                onChange={(e) => updateOption('removeBackground', e.target.checked)}
+                onChange={(v) => updateOption('removeBackground', v)}
+                ariaLabel="去除背景"
               />
-              <div className="h-6 w-11 rounded-full bg-[#3d3d3d] after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:bg-blue-600 peer-checked:after:translate-x-5" />
-            </label>
-          </div>
-        </div>
-
-        <div className="space-y-3 rounded-lg border border-[#2d2d2d] bg-[#181818] p-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium text-gray-300">固定水印区域透明</span>
-            <label className="relative inline-flex cursor-pointer items-center shrink-0">
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={options.clearFixedWatermark}
-                onChange={(e) => updateOption('clearFixedWatermark', e.target.checked)}
-              />
-              <div className="h-6 w-11 rounded-full bg-[#3d3d3d] after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:bg-blue-600 peer-checked:after:translate-x-5" />
-            </label>
-          </div>
-          {options.clearFixedWatermark && (
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <label className="text-gray-500">
-                左 %
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={0.1}
-                  value={options.watermarkLeftPct}
-                  onChange={(e) => updateOption('watermarkLeftPct', e.target.value)}
-                  className="mt-1 w-full bg-[#121212] border border-[#3d3d3d] rounded px-2 py-1.5 text-sm text-white"
-                />
-              </label>
-              <label className="text-gray-500">
-                上 %
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={0.1}
-                  value={options.watermarkTopPct}
-                  onChange={(e) => updateOption('watermarkTopPct', e.target.value)}
-                  className="mt-1 w-full bg-[#121212] border border-[#3d3d3d] rounded px-2 py-1.5 text-sm text-white"
-                />
-              </label>
-              <label className="text-gray-500">
-                宽 %
-                <input
-                  type="number"
-                  min={0.5}
-                  max={100}
-                  step={0.1}
-                  value={options.watermarkWidthPct}
-                  onChange={(e) => updateOption('watermarkWidthPct', e.target.value)}
-                  className="mt-1 w-full bg-[#121212] border border-[#3d3d3d] rounded px-2 py-1.5 text-sm text-white"
-                />
-              </label>
-              <label className="text-gray-500">
-                高 %
-                <input
-                  type="number"
-                  min={0.5}
-                  max={100}
-                  step={0.1}
-                  value={options.watermarkHeightPct}
-                  onChange={(e) => updateOption('watermarkHeightPct', e.target.value)}
-                  className="mt-1 w-full bg-[#121212] border border-[#3d3d3d] rounded px-2 py-1.5 text-sm text-white"
-                />
-              </label>
             </div>
-          )}
+            <div className="space-y-3 px-3 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-gray-200">固定水印区域透明</span>
+                <PanelToggle
+                  checked={options.clearFixedWatermark}
+                  onChange={(v) => updateOption('clearFixedWatermark', v)}
+                  ariaLabel="固定水印区域透明"
+                />
+              </div>
+              {options.clearFixedWatermark && (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <label className="text-gray-500">
+                    左 %
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      value={options.watermarkLeftPct}
+                      onChange={(e) => updateOption('watermarkLeftPct', e.target.value)}
+                      className="mt-1 w-full rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-sm text-white"
+                    />
+                  </label>
+                  <label className="text-gray-500">
+                    上 %
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      value={options.watermarkTopPct}
+                      onChange={(e) => updateOption('watermarkTopPct', e.target.value)}
+                      className="mt-1 w-full rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-sm text-white"
+                    />
+                  </label>
+                  <label className="text-gray-500">
+                    宽 %
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={100}
+                      step={0.1}
+                      value={options.watermarkWidthPct}
+                      onChange={(e) => updateOption('watermarkWidthPct', e.target.value)}
+                      className="mt-1 w-full rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-sm text-white"
+                    />
+                  </label>
+                  <label className="text-gray-500">
+                    高 %
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={100}
+                      step={0.1}
+                      value={options.watermarkHeightPct}
+                      onChange={(e) => updateOption('watermarkHeightPct', e.target.value)}
+                      className="mt-1 w-full rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-sm text-white"
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Output */}
@@ -236,7 +449,7 @@ export function SettingsPanel({
         </div>
       </div>
 
-      <div className="p-5 border-t border-[#2d2d2d] shrink-0">
+      <div className="shrink-0 border-t border-[#2d2d2d] bg-[#1a1a1a] px-4 py-4">
         <button
           onClick={onStartProcessing}
           disabled={selectedForProcessCount === 0 || !options.outputDir || isProcessing}
