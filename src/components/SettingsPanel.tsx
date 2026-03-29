@@ -18,13 +18,7 @@ export interface ProcessOptions {
   watermarkHeightPct: string
 }
 
-const OUTPUT_FORMAT_VALUES: OutputFormatOption[] = [
-  'original',
-  'png',
-  'jpeg',
-  'webp',
-  'avif',
-]
+const OUTPUT_FORMAT_VALUES: OutputFormatOption[] = ['original', 'png', 'jpeg', 'webp', 'avif']
 
 function isOutputFormatOption(v: string): v is OutputFormatOption {
   return (OUTPUT_FORMAT_VALUES as readonly string[]).includes(v)
@@ -36,7 +30,9 @@ interface SettingsPanelProps {
   onSelectOutputDir: () => void
   onStartProcessing: () => void
   isProcessing: boolean
-  hasImages: boolean
+  /** 勾选参与处理的数量 */
+  selectedForProcessCount: number
+  totalImageCount: number
 }
 
 export function SettingsPanel({
@@ -45,7 +41,8 @@ export function SettingsPanel({
   onSelectOutputDir,
   onStartProcessing,
   isProcessing,
-  hasImages
+  selectedForProcessCount,
+  totalImageCount,
 }: SettingsPanelProps) {
   const updateOption = <K extends keyof ProcessOptions>(key: K, value: ProcessOptions[K]) => {
     onChange({ ...options, [key]: value })
@@ -53,9 +50,16 @@ export function SettingsPanel({
 
   return (
     <div className="w-80 bg-[#1e1e1e] border-l border-[#2d2d2d] flex flex-col h-full text-gray-300">
-      <div className="h-14 border-b border-[#2d2d2d] flex items-center px-5 shrink-0">
-        <SlidersHorizontal className="w-5 h-5 mr-2 text-gray-400" />
-        <h2 className="font-semibold text-white">Processing</h2>
+      <div className="h-14 shrink-0 flex flex-col justify-center border-b border-[#2d2d2d] px-5">
+        <div className="flex items-center">
+          <SlidersHorizontal className="mr-2 h-5 w-5 text-gray-400" />
+          <h2 className="font-semibold text-white">Processing</h2>
+        </div>
+        {totalImageCount > 0 && (
+          <p className="mt-0.5 pl-7 text-[11px] text-gray-500">
+            将处理已勾选的 {selectedForProcessCount} 张
+          </p>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-6">
@@ -215,7 +219,7 @@ export function SettingsPanel({
         <div className="space-y-2">
           <label className="text-sm font-medium text-gray-400">Output Folder</label>
           <div className="flex gap-2">
-            <div 
+            <div
               className="flex-1 bg-[#121212] border border-[#3d3d3d] rounded-md px-3 py-2 text-sm text-gray-400 truncate"
               title={options.outputDir || 'Not selected'}
             >
@@ -235,15 +239,19 @@ export function SettingsPanel({
       <div className="p-5 border-t border-[#2d2d2d] shrink-0">
         <button
           onClick={onStartProcessing}
-          disabled={!hasImages || !options.outputDir || isProcessing}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white py-2.5 rounded-md font-medium transition-colors"
+          disabled={selectedForProcessCount === 0 || !options.outputDir || isProcessing}
+          className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 py-2.5 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-500"
         >
           {isProcessing ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
           ) : (
-            <Play className="w-5 h-5" />
+            <Play className="h-5 w-5" />
           )}
-          {isProcessing ? 'Processing...' : 'Start Processing'}
+          {isProcessing
+            ? 'Processing...'
+            : selectedForProcessCount > 0
+              ? `Start Processing (${selectedForProcessCount})`
+              : 'Start Processing'}
         </button>
       </div>
     </div>

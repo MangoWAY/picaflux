@@ -1,6 +1,7 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Sidebar } from './Sidebar'
-import { ImageGrid, ImageFile } from './ImageGrid'
+import { ImageStrip, ImageFile, type ImageStripListMode } from './ImageStrip'
+import { ImagePreviewPane } from './ImagePreviewPane'
 import { SettingsPanel, ProcessOptions } from './SettingsPanel'
 import { AppSettingsPage, BACKGROUND_REMOVAL_BACKEND_STORAGE_KEY } from './AppSettingsPage'
 import { FIXED_WATERMARK_DEFAULTS } from '@/constants/fixedWatermark'
@@ -23,7 +24,7 @@ async function buildImageEntries(paths: string[]): Promise<ImageFile[]> {
         status: 'pending' as const,
         previewUrl: `file://${filePath}`,
       }
-    })
+    }),
   )
   return entries
 }
@@ -39,9 +40,12 @@ function readStoredBackgroundRemovalBackendId(): string {
 export function ImageWorkbench() {
   const [activeTab, setActiveTab] = useState('image')
   const [images, setImages] = useState<ImageFile[]>([])
+  const [stripListMode, setStripListMode] = useState<ImageStripListMode>('thumbnail')
+  const [checkedPaths, setCheckedPaths] = useState<Set<string>>(() => new Set())
+  const [previewPath, setPreviewPath] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [backgroundRemovalBackendId, setBackgroundRemovalBackendId] = useState(
-    readStoredBackgroundRemovalBackendId
+    readStoredBackgroundRemovalBackendId,
   )
   const [options, setOptions] = useState<ProcessOptions>({
     format: 'original',
@@ -58,11 +62,42 @@ export function ImageWorkbench() {
     watermarkHeightPct: FIXED_WATERMARK_DEFAULTS.heightPercent,
   })
 
+  const imagePathsKey = useMemo(() => images.map((i) => i.path).join('\n'), [images])
+  const imagesRef = useRef(images)
+  imagesRef.current = images
+
+  useEffect(() => {
+    const list = imagesRef.current
+    setPreviewPath((prev) => {
+      if (list.length === 0) return null
+      if (prev && list.some((i) => i.path === prev)) return prev
+      return list[0].path
+    })
+  }, [imagePathsKey])
+
+  useEffect(() => {
+    const valid = new Set(imagesRef.current.map((i) => i.path))
+    setCheckedPaths((prev) => {
+      const next = new Set<string>()
+      for (const p of prev) {
+        if (valid.has(p)) next.add(p)
+      }
+      return next
+    })
+  }, [imagePathsKey])
+
   const mergeNewImages = useCallback((newEntries: ImageFile[]) => {
     setImages((prev) => {
       const existingPaths = new Set(prev.map((i) => i.path))
       const uniqueNew = newEntries.filter((i) => !existingPaths.has(i.path))
-      return [...prev, ...uniqueNew]
+      return uniqueNew.length ? [...prev, ...uniqueNew] : prev
+    })
+    setCheckedPaths((prev) => {
+      const n = new Set(prev)
+      for (const e of newEntries) {
+        n.add(e.path)
+      }
+      return n
     })
   }, [])
 
@@ -84,12 +119,35 @@ export function ImageWorkbench() {
       const entries = await buildImageEntries(paths)
       mergeNewImages(entries)
     },
-    [mergeNewImages]
+    [mergeNewImages],
   )
 
   const handleRemoveImage = (path: string) => {
     setImages((prev) => prev.filter((img) => img.path !== path))
+    setCheckedPaths((prev) => {
+      const n = new Set(prev)
+      n.delete(path)
+      return n
+    })
+    setPreviewPath((prev) => (prev === path ? null : prev))
   }
+
+  const handleTogglePath = useCallback((path: string, checked: boolean) => {
+    setCheckedPaths((prev) => {
+      const n = new Set(prev)
+      if (checked) n.add(path)
+      else n.delete(path)
+      return n
+    })
+  }, [])
+
+  const handleSelectAllForProcess = useCallback(() => {
+    setCheckedPaths(new Set(images.map((i) => i.path)))
+  }, [images])
+
+  const handleClearProcessSelection = useCallback(() => {
+    setCheckedPaths(new Set())
+  }, [])
 
   const handleSelectOutputDir = async () => {
     try {
@@ -103,11 +161,15 @@ export function ImageWorkbench() {
   }
 
   const handleStartProcessing = async () => {
-    if (images.length === 0 || !options.outputDir) return
+    const batch = images.filter((img) => checkedPaths.has(img.path))
+    if (batch.length === 0 || !options.outputDir) return
 
-    const batch = images
     setIsProcessing(true)
-    setImages((prev) => prev.map((img) => ({ ...img, status: 'processing' as const })))
+    setImages((prev) =>
+      prev.map((img) =>
+        checkedPaths.has(img.path) ? { ...img, status: 'processing' as const } : img,
+      ),
+    )
 
     let removalBackendId: string | undefined
     if (options.removeBackground) {
@@ -147,11 +209,11 @@ export function ImageWorkbench() {
             topPercent: parseWatermarkPct(options.watermarkTopPct, wmDefaults.top),
             widthPercent: Math.max(
               0.5,
-              parseWatermarkPct(options.watermarkWidthPct, wmDefaults.width)
+              parseWatermarkPct(options.watermarkWidthPct, wmDefaults.width),
             ),
             heightPercent: Math.max(
               0.5,
-              parseWatermarkPct(options.watermarkHeightPct, wmDefaults.height)
+              parseWatermarkPct(options.watermarkHeightPct, wmDefaults.height),
             ),
           }
         : undefined,
@@ -162,17 +224,17 @@ export function ImageWorkbench() {
         const result = await window.picafluxAPI.processImage(
           img.path,
           options.outputDir,
-          processOpts
+          processOpts,
         )
 
         setImages((prev) =>
           prev.map((p) =>
-            p.path === img.path ? { ...p, status: result.success ? 'done' : 'error' } : p
-          )
+            p.path === img.path ? { ...p, status: result.success ? 'done' : 'error' } : p,
+          ),
         )
       } catch {
         setImages((prev) =>
-          prev.map((p) => (p.path === img.path ? { ...p, status: 'error' as const } : p))
+          prev.map((p) => (p.path === img.path ? { ...p, status: 'error' as const } : p)),
         )
       }
     }
@@ -180,6 +242,8 @@ export function ImageWorkbench() {
     setIsProcessing(false)
   }
 
+  const previewImage = previewPath ? (images.find((i) => i.path === previewPath) ?? null) : null
+  const selectedCount = checkedPaths.size
   const isMac = window.picafluxAPI.platform === 'darwin'
 
   return (
@@ -193,40 +257,54 @@ export function ImageWorkbench() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {activeTab === 'settings' ? (
-        <AppSettingsPage
-          backgroundRemovalBackendId={backgroundRemovalBackendId}
-          onBackgroundRemovalBackendIdChange={(id) => {
-            setBackgroundRemovalBackendId(id)
-            try {
-              window.localStorage.setItem(BACKGROUND_REMOVAL_BACKEND_STORAGE_KEY, id)
-            } catch {
-              /* ignore */
-            }
-          }}
-        />
-      ) : activeTab === 'image' ? (
-        <>
-          <ImageGrid
-            images={images}
-            onAddImages={handleAddImages}
-            onRemoveImage={handleRemoveImage}
-            onDropPaths={handleDropPaths}
+        {activeTab === 'settings' ? (
+          <AppSettingsPage
+            backgroundRemovalBackendId={backgroundRemovalBackendId}
+            onBackgroundRemovalBackendIdChange={(id) => {
+              setBackgroundRemovalBackendId(id)
+              try {
+                window.localStorage.setItem(BACKGROUND_REMOVAL_BACKEND_STORAGE_KEY, id)
+              } catch {
+                /* ignore */
+              }
+            }}
           />
-          <SettingsPanel
-            options={options}
-            onChange={setOptions}
-            onSelectOutputDir={handleSelectOutputDir}
-            onStartProcessing={handleStartProcessing}
-            isProcessing={isProcessing}
-            hasImages={images.length > 0}
-          />
-        </>
-      ) : (
-        <div className="flex-1 flex items-center justify-center text-gray-500">
-          <p className="text-lg">Module &quot;{activeTab}&quot; is under construction.</p>
-        </div>
-      )}
+        ) : activeTab === 'image' ? (
+          <>
+            <ImageStrip
+              images={images}
+              listMode={stripListMode}
+              onListModeChange={setStripListMode}
+              checkedPaths={checkedPaths}
+              onTogglePath={handleTogglePath}
+              onSelectAll={handleSelectAllForProcess}
+              onClearSelection={handleClearProcessSelection}
+              previewPath={previewPath}
+              onPreviewPath={setPreviewPath}
+              onRemoveImage={handleRemoveImage}
+            />
+            <ImagePreviewPane
+              images={images}
+              previewImage={previewImage}
+              selectedCount={selectedCount}
+              onAddImages={handleAddImages}
+              onDropPaths={handleDropPaths}
+            />
+            <SettingsPanel
+              options={options}
+              onChange={setOptions}
+              onSelectOutputDir={handleSelectOutputDir}
+              onStartProcessing={handleStartProcessing}
+              isProcessing={isProcessing}
+              selectedForProcessCount={selectedCount}
+              totalImageCount={images.length}
+            />
+          </>
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-gray-500">
+            <p className="text-lg">Module &quot;{activeTab}&quot; is under construction.</p>
+          </div>
+        )}
       </div>
     </div>
   )
