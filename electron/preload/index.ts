@@ -1,4 +1,4 @@
-import { ipcRenderer, contextBridge, webUtils } from 'electron'
+import { ipcRenderer, contextBridge, webUtils, type IpcRendererEvent } from 'electron'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -25,6 +25,37 @@ contextBridge.exposeInMainWorld('picafluxAPI', {
   openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
   processImage: (inputPath: string, outputDir: string, options: unknown) =>
     ipcRenderer.invoke('image:process', inputPath, outputDir, options),
+  openVideoFiles: () => ipcRenderer.invoke('dialog:openVideoFiles') as Promise<string[]>,
+  processVideo: (taskId: string, inputPath: string, outputDir: string, options: unknown) =>
+    ipcRenderer.invoke('video:process', taskId, inputPath, outputDir, options) as Promise<{
+      success: boolean
+      outputPath?: string
+      outputPaths?: string[]
+      error?: string
+    }>,
+  getVideoFileInfo: (filePath: string) =>
+    ipcRenderer.invoke('video:getFileInfo', filePath) as Promise<{
+      durationSec: number
+      width?: number
+      height?: number
+      formatName?: string
+      videoCodec?: string
+      audioCodec?: string
+      size: number
+    } | null>,
+  cancelVideoTask: (taskId: string) =>
+    ipcRenderer.invoke('video:cancel', taskId) as Promise<boolean>,
+  subscribeVideoTaskProgress: (
+    callback: (payload: { taskId: string; percent: number }) => void,
+  ): (() => void) => {
+    const handler = (_event: IpcRendererEvent, payload: { taskId: string; percent: number }) => {
+      callback(payload)
+    }
+    ipcRenderer.on('video:taskProgress', handler)
+    return () => {
+      ipcRenderer.removeListener('video:taskProgress', handler)
+    }
+  },
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   getImageFileInfo: (filePath: string) =>
     ipcRenderer.invoke('image:getFileInfo', filePath) as Promise<{

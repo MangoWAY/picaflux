@@ -1,9 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import { Sidebar } from './Sidebar'
 import { ImageStrip, ImageFile, type ImageStripListMode } from './ImageStrip'
 import { ImagePreviewPane } from './ImagePreviewPane'
 import { SettingsPanel, ProcessOptions, type ResizePercentPreset } from './SettingsPanel'
-import { AppSettingsPage, BACKGROUND_REMOVAL_BACKEND_STORAGE_KEY } from './AppSettingsPage'
 import { FIXED_WATERMARK_DEFAULTS } from '@/constants/fixedWatermark'
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|avif)$/i
@@ -45,24 +43,16 @@ function effectiveResizeScalePercent(options: ProcessOptions): number {
   return map[options.resizePercentPreset]
 }
 
-function readStoredBackgroundRemovalBackendId(): string {
-  try {
-    return window.localStorage.getItem(BACKGROUND_REMOVAL_BACKEND_STORAGE_KEY) || 'imgly'
-  } catch {
-    return 'imgly'
-  }
-}
-
-export function ImageWorkbench() {
-  const [activeTab, setActiveTab] = useState('image')
+export function ImageWorkbench({
+  backgroundRemovalBackendId,
+}: {
+  backgroundRemovalBackendId: string
+}) {
   const [images, setImages] = useState<ImageFile[]>([])
   const [stripListMode, setStripListMode] = useState<ImageStripListMode>('thumbnail')
   const [checkedPaths, setCheckedPaths] = useState<Set<string>>(() => new Set())
   const [previewPath, setPreviewPath] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [backgroundRemovalBackendId, setBackgroundRemovalBackendId] = useState(
-    readStoredBackgroundRemovalBackendId,
-  )
   const [options, setOptions] = useState<ProcessOptions>({
     format: 'png',
     rotateQuarterTurns: 0,
@@ -302,10 +292,7 @@ export function ImageWorkbench() {
     return {
       leftPercent: parseWatermarkPct(options.watermarkLeftPct, wmDefaults.left),
       topPercent: parseWatermarkPct(options.watermarkTopPct, wmDefaults.top),
-      widthPercent: Math.max(
-        0.5,
-        parseWatermarkPct(options.watermarkWidthPct, wmDefaults.width),
-      ),
+      widthPercent: Math.max(0.5, parseWatermarkPct(options.watermarkWidthPct, wmDefaults.width)),
       heightPercent: Math.max(
         0.5,
         parseWatermarkPct(options.watermarkHeightPct, wmDefaults.height),
@@ -319,72 +306,41 @@ export function ImageWorkbench() {
     options.watermarkHeightPct,
   ])
   const selectedCount = checkedPaths.size
-  const isMac = window.picafluxAPI.platform === 'darwin'
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#121212]">
-      {isMac ? (
-        <div
-          className="h-7 shrink-0 border-b border-[#2d2d2d] bg-[#121212]"
-          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-        />
-      ) : null}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-
-        {activeTab === 'settings' ? (
-          <AppSettingsPage
-            backgroundRemovalBackendId={backgroundRemovalBackendId}
-            onBackgroundRemovalBackendIdChange={(id) => {
-              setBackgroundRemovalBackendId(id)
-              try {
-                window.localStorage.setItem(BACKGROUND_REMOVAL_BACKEND_STORAGE_KEY, id)
-              } catch {
-                /* ignore */
-              }
-            }}
-          />
-        ) : activeTab === 'image' ? (
-          <>
-            <ImageStrip
-              images={images}
-              listMode={stripListMode}
-              onListModeChange={setStripListMode}
-              checkedPaths={checkedPaths}
-              onTogglePath={handleTogglePath}
-              onSelectAll={handleSelectAllForProcess}
-              onClearSelection={handleClearProcessSelection}
-              previewPath={previewPath}
-              onPreviewPath={setPreviewPath}
-              onRemoveImage={handleRemoveImage}
-            />
-            <ImagePreviewPane
-              images={images}
-              previewImage={previewImage}
-              selectedCount={selectedCount}
-              onAddImages={handleAddImages}
-              onDropPaths={handleDropPaths}
-              rotateQuarterTurns={options.rotateQuarterTurns}
-              flipHorizontal={options.flipHorizontal}
-              flipVertical={options.flipVertical}
-              fixedWatermarkRegionPercent={fixedWatermarkRegionForPreview}
-            />
-            <SettingsPanel
-              options={options}
-              onChange={setOptions}
-              onSelectOutputDir={handleSelectOutputDir}
-              onStartProcessing={handleStartProcessing}
-              isProcessing={isProcessing}
-              selectedForProcessCount={selectedCount}
-              totalImageCount={images.length}
-            />
-          </>
-        ) : (
-          <div className="flex flex-1 items-center justify-center text-gray-500">
-            <p className="text-lg">Module &quot;{activeTab}&quot; is under construction.</p>
-          </div>
-        )}
-      </div>
-    </div>
+    <>
+      <ImageStrip
+        images={images}
+        listMode={stripListMode}
+        onListModeChange={setStripListMode}
+        checkedPaths={checkedPaths}
+        onTogglePath={handleTogglePath}
+        onSelectAll={handleSelectAllForProcess}
+        onClearSelection={handleClearProcessSelection}
+        previewPath={previewPath}
+        onPreviewPath={setPreviewPath}
+        onRemoveImage={handleRemoveImage}
+      />
+      <ImagePreviewPane
+        images={images}
+        previewImage={previewImage}
+        selectedCount={selectedCount}
+        onAddImages={handleAddImages}
+        onDropPaths={handleDropPaths}
+        rotateQuarterTurns={options.rotateQuarterTurns}
+        flipHorizontal={options.flipHorizontal}
+        flipVertical={options.flipVertical}
+        fixedWatermarkRegionPercent={fixedWatermarkRegionForPreview}
+      />
+      <SettingsPanel
+        options={options}
+        onChange={setOptions}
+        onSelectOutputDir={handleSelectOutputDir}
+        onStartProcessing={handleStartProcessing}
+        isProcessing={isProcessing}
+        selectedForProcessCount={selectedCount}
+        totalImageCount={images.length}
+      />
+    </>
   )
 }

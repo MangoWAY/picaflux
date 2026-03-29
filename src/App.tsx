@@ -1,10 +1,8 @@
-import { ImageWorkbench } from '@/components/ImageWorkbench'
+import { MainWorkbench } from '@/components/MainWorkbench'
 import './App.css'
 
 function App() {
-  return (
-    <ImageWorkbench />
-  )
+  return <MainWorkbench />
 }
 
 export default App

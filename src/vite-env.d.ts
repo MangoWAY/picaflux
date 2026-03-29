@@ -9,7 +9,7 @@ interface Window {
     processImage: (
       inputPath: string,
       outputDir: string,
-      options: unknown
+      options: unknown,
     ) => Promise<{
       success: boolean
       outputPath?: string
@@ -24,5 +24,30 @@ interface Window {
     } | null>
     listBackgroundRemovalBackends: () => Promise<{ id: string; displayName: string }[]>
     platform: NodeJS.Platform
+    openVideoFiles: () => Promise<string[]>
+    processVideo: (
+      taskId: string,
+      inputPath: string,
+      outputDir: string,
+      options: unknown,
+    ) => Promise<{
+      success: boolean
+      outputPath?: string
+      outputPaths?: string[]
+      error?: string
+    }>
+    getVideoFileInfo: (filePath: string) => Promise<{
+      durationSec: number
+      width?: number
+      height?: number
+      formatName?: string
+      videoCodec?: string
+      audioCodec?: string
+      size: number
+    } | null>
+    cancelVideoTask: (taskId: string) => Promise<boolean>
+    subscribeVideoTaskProgress: (
+      callback: (payload: { taskId: string; percent: number }) => void,
+    ) => () => void
   }
 }

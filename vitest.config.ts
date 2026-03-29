@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     root: __dirname,
     include: ['test/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'test/e2e.spec.ts'],
     testTimeout: 1000 * 29,
   },
 })

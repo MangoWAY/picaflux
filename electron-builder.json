@@ -5,7 +5,10 @@
   "asarUnpack": [
     "**/node_modules/sharp/**/*",
     "**/node_modules/onnxruntime-node/**/*",
-    "**/node_modules/@imgly/**/*"
+    "**/node_modules/@imgly/**/*",
+    "**/node_modules/@ffmpeg-installer/**/*",
+    "**/node_modules/@ffprobe-installer/**/*",
+    "**/node_modules/fluent-ffmpeg/**/*"
   ],
   "directories": {
     "output": "release/${version}"

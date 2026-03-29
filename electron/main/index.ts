@@ -13,6 +13,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { update } from './update'
 import { processImage, getImageFileInfo, sanitizeProcessImageOptions } from './image-processor'
+import { processVideo, getVideoFileInfo, cancelVideoTask } from './video-processor'
 import {
   registerBackgroundRemovalBackends,
   listBackgroundRemovalBackendMetas,
@@ -199,4 +200,41 @@ ipcMain.handle('image:getFileInfo', async (_, inputPath: string) => {
 
 ipcMain.handle('image:listBackgroundRemovalBackends', () => {
   return listBackgroundRemovalBackendMetas()
+})
+
+const VIDEO_DIALOG_EXT = ['mp4', 'mov', 'mkv', 'webm', 'm4v', 'avi', 'mpeg', 'mpg'] as const
+
+ipcMain.handle('dialog:openVideoFiles', async () => {
+  if (!win) return []
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Video', extensions: [...VIDEO_DIALOG_EXT] }],
+  })
+  return canceled ? [] : filePaths
+})
+
+ipcMain.handle(
+  'video:process',
+  async (event, taskId: string, inputPath: string, outputDir: string, options: unknown) => {
+    if (
+      typeof taskId !== 'string' ||
+      typeof inputPath !== 'string' ||
+      typeof outputDir !== 'string'
+    ) {
+      return { success: false, error: 'Invalid arguments' }
+    }
+    return await processVideo(taskId, inputPath, outputDir, options, event.sender)
+  },
+)
+
+ipcMain.handle('video:getFileInfo', async (_, inputPath: string) => {
+  if (typeof inputPath !== 'string' || !inputPath) {
+    return null
+  }
+  return await getVideoFileInfo(inputPath)
+})
+
+ipcMain.handle('video:cancel', (_, taskId: string) => {
+  if (typeof taskId !== 'string') return false
+  return cancelVideoTask(taskId)
 })
