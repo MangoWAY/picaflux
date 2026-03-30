@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { UploadCloud, FileImage } from 'lucide-react'
 import type { ImageFile } from './ImageStrip'
 
@@ -136,12 +136,30 @@ export function ImagePreviewPane({
   const [alphaDataUrl, setAlphaDataUrl] = useState<string | null>(null)
   const [alphaError, setAlphaError] = useState<string | null>(null)
 
+  const viewportRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
   const [imgLayout, setImgLayout] = useState<{ scale: number; ox: number; oy: number } | null>(null)
 
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const dragRef = useRef<{
+    active: boolean
+    startClientX: number
+    startClientY: number
+    startPanX: number
+    startPanY: number
+  }>({ active: false, startClientX: 0, startClientY: 0, startPanX: 0, startPanY: 0 })
+
+  useEffect(() => {
+    // 切换预览图时回到适配视图
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
+  }, [previewImage?.path])
+
   const updateImgLayout = useCallback(() => {
+    const vp = viewportRef.current
     const el = imgRef.current
-    if (!el || !previewSrc) {
+    if (!vp || !el || !previewSrc) {
       setImgLayout(null)
       return
     }
@@ -151,8 +169,10 @@ export function ImagePreviewPane({
       setImgLayout(null)
       return
     }
-    const ew = el.offsetWidth
-    const eh = el.offsetHeight
+    const rect = vp.getBoundingClientRect()
+    const padding = 16 // 与 p-4 一致
+    const ew = Math.max(0, rect.width - padding * 2)
+    const eh = Math.max(0, rect.height - padding * 2)
     if (!ew || !eh) {
       setImgLayout(null)
       return
@@ -168,10 +188,10 @@ export function ImagePreviewPane({
   }, [updateImgLayout, rotateDeg, flipHorizontal, flipVertical, fixedWatermarkRegionPercent])
 
   useEffect(() => {
-    const el = imgRef.current
-    if (!el) return
+    const vp = viewportRef.current
+    if (!vp) return
     const ro = new ResizeObserver(() => updateImgLayout())
-    ro.observe(el)
+    ro.observe(vp)
     return () => ro.disconnect()
   }, [updateImgLayout])
 
@@ -221,6 +241,78 @@ export function ImagePreviewPane({
     backgroundPosition: '0 0, 0 12px, 12px -12px, -12px 0px',
   }
 
+  const display = useMemo(() => {
+    const baseScale = imgLayout?.scale ?? 0
+    const displayScale = baseScale > 0 ? baseScale * zoom : 0
+    const percent = displayScale > 0 ? Math.round(displayScale * 100) : 0
+    return { baseScale, displayScale, percent }
+  }, [imgLayout?.scale, zoom])
+
+  const setFit = useCallback(() => {
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
+  }, [])
+
+  const setOneToOne = useCallback(() => {
+    const base = imgLayout?.scale
+    if (!base || base <= 0) return
+    setZoom(1 / base)
+    setPan({ x: 0, y: 0 })
+  }, [imgLayout?.scale])
+
+  const zoomByStep = useCallback(
+    (dir: 1 | -1) => {
+      setZoom((z) => {
+        const factor = dir > 0 ? 1.15 : 1 / 1.15
+        const next = Math.min(64, Math.max(0.05, z * factor))
+        return next
+      })
+    },
+    [setZoom],
+  )
+
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (!previewImage) return
+      e.preventDefault()
+      const dir: 1 | -1 = e.deltaY < 0 ? 1 : -1
+      zoomByStep(dir)
+    },
+    [previewImage, zoomByStep],
+  )
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return
+      dragRef.current = {
+        active: true,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startPanX: pan.x,
+        startPanY: pan.y,
+      }
+    },
+    [pan.x, pan.y],
+  )
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragRef.current.active) return
+    const dx = e.clientX - dragRef.current.startClientX
+    const dy = e.clientY - dragRef.current.startClientY
+    setPan({ x: dragRef.current.startPanX + dx, y: dragRef.current.startPanY + dy })
+  }, [])
+
+  const handleMouseUpOrLeave = useCallback(() => {
+    dragRef.current.active = false
+  }, [])
+
+  const imgRenderStyle: React.CSSProperties = useMemo(() => {
+    const pixelated = display.displayScale >= 1.5
+    return {
+      imageRendering: pixelated ? 'pixelated' : 'auto',
+    }
+  }, [display.displayScale])
+
   return (
     <div
       className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#121212]"
@@ -261,48 +353,109 @@ export function ImagePreviewPane({
           <div className="flex h-full min-h-0 flex-col gap-3">
             <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-[#2d2d2d]">
               <div
+                ref={viewportRef}
                 className="relative flex h-full min-h-0 w-full min-w-0 items-center justify-center p-4"
                 style={previewBgMode === 'checker' ? checkerStyle : { backgroundColor: solidBg }}
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUpOrLeave}
+                onMouseLeave={handleMouseUpOrLeave}
               >
                 {previewSrc ? (
                   <div
                     className="relative flex max-h-full max-w-full min-h-0 min-w-0"
-                    style={previewTransformStyle}
+                    style={{
+                      transform: `translate(${pan.x}px, ${pan.y}px) translate(${imgLayout?.ox ?? 0}px, ${imgLayout?.oy ?? 0}px) scale(${(imgLayout?.scale ?? 1) * zoom})`,
+                      transformOrigin: 'top left',
+                      transition: dragRef.current.active ? 'none' : 'transform 0.06s linear',
+                      willChange: 'transform',
+                    }}
                   >
-                    <img
-                      ref={imgRef}
-                      src={showAlpha ? alphaDataUrl || '' : previewSrc}
-                      alt={previewImage.name}
-                      onLoad={updateImgLayout}
-                      className="block h-auto w-auto max-h-full max-w-full object-contain"
-                    />
-                    {showAlpha && !alphaDataUrl ? (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="rounded-md bg-black/60 px-3 py-2 text-xs text-gray-200">
-                          {alphaError ? `Alpha 预览失败：${alphaError}` : '生成 Alpha 预览中...'}
-                        </div>
-                      </div>
-                    ) : null}
-                    {fixedWatermarkPixelRect && imgLayout ? (
-                      <div
-                        className="pointer-events-none absolute z-10 box-border border-2 border-dashed border-sky-400/95 bg-sky-400/15 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+                    <div className="relative" style={previewTransformStyle}>
+                      <img
+                        ref={imgRef}
+                        src={showAlpha ? alphaDataUrl || '' : previewSrc}
+                        alt={previewImage.name}
+                        onLoad={updateImgLayout}
+                        className="block select-none"
+                        draggable={false}
                         style={{
-                          left: imgLayout.ox + fixedWatermarkPixelRect.x * imgLayout.scale,
-                          top: imgLayout.oy + fixedWatermarkPixelRect.y * imgLayout.scale,
-                          width: fixedWatermarkPixelRect.width * imgLayout.scale,
-                          height: fixedWatermarkPixelRect.height * imgLayout.scale,
+                          ...imgRenderStyle,
+                          width: nw > 0 ? nw : undefined,
+                          height: nh > 0 ? nh : undefined,
+                          maxWidth: 'none',
+                          maxHeight: 'none',
                         }}
-                        title="导出时「固定水印区域透明」将清除此矩形内 alpha"
-                      >
-                        <span className="absolute left-0 top-0 whitespace-nowrap rounded-br bg-black/70 px-1 py-0.5 text-[10px] font-medium text-sky-100">
-                          固定透明区域
-                        </span>
-                      </div>
-                    ) : null}
+                      />
+                      {showAlpha && !alphaDataUrl ? (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="rounded-md bg-black/60 px-3 py-2 text-xs text-gray-200">
+                            {alphaError ? `Alpha 预览失败：${alphaError}` : '生成 Alpha 预览中...'}
+                          </div>
+                        </div>
+                      ) : null}
+                      {fixedWatermarkPixelRect && imgLayout ? (
+                        <div
+                          className="pointer-events-none absolute z-10 box-border border-2 border-dashed border-sky-400/95 bg-sky-400/15 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+                          style={{
+                            left: fixedWatermarkPixelRect.x,
+                            top: fixedWatermarkPixelRect.y,
+                            width: fixedWatermarkPixelRect.width,
+                            height: fixedWatermarkPixelRect.height,
+                          }}
+                          title="导出时「固定水印区域透明」将清除此矩形内 alpha"
+                        >
+                          <span className="absolute left-0 top-0 whitespace-nowrap rounded-br bg-black/70 px-1 py-0.5 text-[10px] font-medium text-sky-100">
+                            固定透明区域
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 ) : (
                   <FileImage className="h-24 w-24 text-gray-600" />
                 )}
+
+                {previewSrc ? (
+                  <div className="absolute right-3 top-3 z-20 flex items-center gap-1 rounded-md border border-[#2d2d2d] bg-black/50 px-2 py-1 text-[11px] text-gray-200 backdrop-blur">
+                    <button
+                      type="button"
+                      onClick={setFit}
+                      className="rounded px-2 py-1 text-gray-100 hover:bg-white/10"
+                      title="适配视图"
+                    >
+                      Fit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={setOneToOne}
+                      className="rounded px-2 py-1 text-gray-100 hover:bg-white/10"
+                      title="100%（1:1 像素）"
+                      disabled={!imgLayout?.scale}
+                    >
+                      100%
+                    </button>
+                    <div className="mx-1 h-4 w-px bg-white/15" />
+                    <button
+                      type="button"
+                      onClick={() => zoomByStep(-1)}
+                      className="rounded px-2 py-1 text-gray-100 hover:bg-white/10"
+                      title="缩小"
+                    >
+                      −
+                    </button>
+                    <span className="w-12 text-center tabular-nums">{display.percent}%</span>
+                    <button
+                      type="button"
+                      onClick={() => zoomByStep(1)}
+                      className="rounded px-2 py-1 text-gray-100 hover:bg-white/10"
+                      title="放大"
+                    >
+                      +
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
             <div className="shrink-0 rounded-xl border border-[#2d2d2d] bg-[#181818] px-3 py-2">
