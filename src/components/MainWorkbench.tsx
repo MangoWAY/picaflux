@@ -21,7 +21,7 @@ export function MainWorkbench() {
   const isMac = window.picafluxAPI.platform === 'darwin'
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#121212]">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-[#121212]">
       {isMac ? (
         <div
           className="h-7 shrink-0 border-b border-[#2d2d2d] bg-[#121212]"

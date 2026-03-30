@@ -16,7 +16,7 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   ]
 
   return (
-    <div className="w-64 h-full bg-[#1e1e1e] border-r border-[#2d2d2d] flex flex-col text-gray-300">
+    <div className="flex h-full min-h-0 w-64 shrink-0 flex-col border-r border-[#2d2d2d] bg-[#1e1e1e] text-gray-300">
       <div className="p-6 flex items-center gap-2 text-white font-bold text-xl tracking-tight">
         <Sparkles className="w-6 h-6 text-blue-500" />
         PicaFlux

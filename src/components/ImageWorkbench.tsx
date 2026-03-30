@@ -61,6 +61,8 @@ export function ImageWorkbench({
     sliceEnabled: false,
     sliceRows: '4',
     sliceCols: '4',
+    sliceXLines: undefined,
+    sliceYLines: undefined,
     resizeMode: 'percent',
     resizePercentPreset: 'none',
     resizeCustomPercentStr: '100',
@@ -269,6 +271,8 @@ export function ImageWorkbench({
               ...processOpts,
               rows: sliceRows,
               cols: sliceCols,
+              xLines: options.sliceXLines,
+              yLines: options.sliceYLines,
             })
           : await window.picafluxAPI.processImage(img.path, options.outputDir, processOpts)
 
@@ -321,7 +325,7 @@ export function ImageWorkbench({
   const selectedCount = checkedPaths.size
 
   return (
-    <>
+    <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
       <ImageStrip
         images={images}
         listMode={stripListMode}
@@ -344,6 +348,12 @@ export function ImageWorkbench({
         flipHorizontal={options.flipHorizontal}
         flipVertical={options.flipVertical}
         fixedWatermarkRegionPercent={fixedWatermarkRegionForPreview}
+        sliceEnabled={options.sliceEnabled}
+        sliceXLines={options.sliceXLines}
+        sliceYLines={options.sliceYLines}
+        onUpdateSliceLines={(xLines, yLines) =>
+          setOptions((prev) => ({ ...prev, sliceXLines: xLines, sliceYLines: yLines }))
+        }
       />
       <SettingsPanel
         options={options}
@@ -354,6 +364,6 @@ export function ImageWorkbench({
         selectedForProcessCount={selectedCount}
         totalImageCount={images.length}
       />
-    </>
+    </div>
   )
 }

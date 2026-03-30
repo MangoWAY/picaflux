@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import clsx from 'clsx'
 import {
   FolderOpen,
@@ -26,6 +26,9 @@ export interface ProcessOptions {
   sliceEnabled: boolean
   sliceRows: string
   sliceCols: string
+  /** 自定义切图线（0.0~1.0 的比例），如果为空则使用均分 */
+  sliceXLines?: number[]
+  sliceYLines?: number[]
   /** 百分比缩放与像素缩放二选一 */
   resizeMode: 'percent' | 'pixels'
   resizePercentPreset: ResizePercentPreset
@@ -102,8 +105,20 @@ export function SettingsPanel({
     onChange({ ...options, [key]: value })
   }
 
+  const qualitySliderRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const el = qualitySliderRef.current
+    if (!el) return
+    const stop = (e: WheelEvent) => e.preventDefault()
+    el.addEventListener('wheel', stop, { passive: false })
+    return () => el.removeEventListener('wheel', stop)
+  }, [])
+
   return (
-    <div className="flex h-full min-h-0 w-[min(100%,22rem)] shrink-0 flex-col border-l border-[#2d2d2d] bg-[#1e1e1e] text-gray-300">
+    <div
+      className="flex h-full min-h-0 w-[min(100%,22rem)] shrink-0 flex-col border-l border-[#2d2d2d] bg-[#1e1e1e] text-gray-300"
+      style={{ overflow: 'hidden' }}
+    >
       <div className="h-14 shrink-0 flex flex-col justify-center border-b border-[#2d2d2d] px-4">
         <div className="flex items-center">
           <SlidersHorizontal className="mr-2 h-5 w-5 text-gray-400" />
@@ -116,7 +131,10 @@ export function SettingsPanel({
         )}
       </div>
 
-      <div className="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-4 py-4">
+      <div
+        className="min-h-0 min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto bg-[#1e1e1e] px-4 py-4"
+        style={{ overscrollBehavior: 'none' }}
+      >
         {/* Format */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-gray-400">Format</label>
@@ -341,6 +359,7 @@ export function SettingsPanel({
             <span className="text-sm text-gray-300">{options.quality}%</span>
           </div>
           <input
+            ref={qualitySliderRef}
             type="range"
             min="1"
             max="100"
@@ -351,19 +370,11 @@ export function SettingsPanel({
         </div>
 
         <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
-          <div className="border-b border-[#2d2d2d] px-3 py-2">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
-              图像处理
-            </p>
-            <p className="mt-0.5 text-[10px] leading-snug text-gray-600">
-              导出时按顺序应用；中间预览可显示固定透明区域
-            </p>
-          </div>
           <div className="divide-y divide-[#2d2d2d]">
             <div className="flex items-center justify-between gap-3 px-3 py-3">
               <div className="min-w-0">
                 <span className="text-sm font-medium text-gray-200">去除背景</span>
-                <p className="mt-0.5 text-[10px] text-gray-500">先抠图再应用下方水印选项</p>
+                <p className="mt-0.5 text-[10px] text-gray-500">AI 自动抠图</p>
               </div>
               <PanelToggle
                 checked={options.removeBackground}
@@ -373,11 +384,14 @@ export function SettingsPanel({
             </div>
             <div className="space-y-3 px-3 py-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-gray-200">固定水印区域透明</span>
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-gray-200">固定透明区域</span>
+                  <p className="mt-0.5 text-[10px] text-gray-500">清除指定区域的内容</p>
+                </div>
                 <PanelToggle
                   checked={options.clearFixedWatermark}
                   onChange={(v) => updateOption('clearFixedWatermark', v)}
-                  ariaLabel="固定水印区域透明"
+                  ariaLabel="固定透明区域"
                 />
               </div>
               {options.clearFixedWatermark && (
@@ -457,22 +471,31 @@ export function SettingsPanel({
         </div>
 
         <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
-          <div className="border-b border-[#2d2d2d] px-3 py-2">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">切图</p>
-            <p className="mt-0.5 text-[10px] leading-snug text-gray-600">
-              将一张图按行×列均分输出；开启后会输出多张图片
-            </p>
-          </div>
           <div className="divide-y divide-[#2d2d2d]">
             <div className="flex items-center justify-between gap-3 px-3 py-3">
               <div className="min-w-0">
-                <span className="text-sm font-medium text-gray-200">启用切图</span>
-                <p className="mt-0.5 text-[10px] text-gray-500">适合 4×4、3×3 等网格素材</p>
+                <span className="text-sm font-medium text-gray-200">网格切图</span>
+                <p className="mt-0.5 text-[10px] text-gray-500">将图片按行和列均分切片</p>
               </div>
               <PanelToggle
                 checked={options.sliceEnabled}
-                onChange={(v) => updateOption('sliceEnabled', v)}
-                ariaLabel="启用切图"
+                onChange={(v) => {
+                  const updates: Partial<ProcessOptions> = { sliceEnabled: v }
+                  if (v) {
+                    const rows = parseInt(options.sliceRows, 10)
+                    const cols = parseInt(options.sliceCols, 10)
+                    if (options.sliceYLines === undefined && Number.isFinite(rows) && rows > 0) {
+                      updates.sliceYLines =
+                        rows > 1 ? Array.from({ length: rows - 1 }, (_, i) => (i + 1) / rows) : []
+                    }
+                    if (options.sliceXLines === undefined && Number.isFinite(cols) && cols > 0) {
+                      updates.sliceXLines =
+                        cols > 1 ? Array.from({ length: cols - 1 }, (_, i) => (i + 1) / cols) : []
+                    }
+                  }
+                  onChange({ ...options, ...updates })
+                }}
+                ariaLabel="网格切图"
               />
             </div>
             {options.sliceEnabled && (
@@ -486,8 +509,18 @@ export function SettingsPanel({
                       max={64}
                       step={1}
                       value={options.sliceRows}
-                      onChange={(e) => updateOption('sliceRows', e.target.value)}
-                      className="mt-1 w-full rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-sm text-white"
+                      onChange={(e) => {
+                        const val = e.target.value
+                        const rows = parseInt(val, 10)
+                        let yLines: number[] | undefined
+                        if (Number.isFinite(rows) && rows > 1) {
+                          yLines = Array.from({ length: rows - 1 }, (_, i) => (i + 1) / rows)
+                        } else if (rows === 1) {
+                          yLines = []
+                        }
+                        onChange({ ...options, sliceRows: val, sliceYLines: yLines })
+                      }}
+                      className="mt-1 w-full rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
                     />
                   </label>
                   <label className="text-gray-500">
@@ -498,24 +531,28 @@ export function SettingsPanel({
                       max={64}
                       step={1}
                       value={options.sliceCols}
-                      onChange={(e) => updateOption('sliceCols', e.target.value)}
-                      className="mt-1 w-full rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-sm text-white"
+                      onChange={(e) => {
+                        const val = e.target.value
+                        const cols = parseInt(val, 10)
+                        let xLines: number[] | undefined
+                        if (Number.isFinite(cols) && cols > 1) {
+                          xLines = Array.from({ length: cols - 1 }, (_, i) => (i + 1) / cols)
+                        } else if (cols === 1) {
+                          xLines = []
+                        }
+                        onChange({ ...options, sliceCols: val, sliceXLines: xLines })
+                      }}
+                      className="mt-1 w-full rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
                     />
                   </label>
                 </div>
-                <p className="text-[10px] leading-relaxed text-gray-600">
-                  输出命名：
-                  <span className="text-gray-500">
-                    name_slice_行x列_r{`{row}`}c{`{col}`}.ext
-                  </span>
-                </p>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-[#2d2d2d] bg-[#1a1a1a] px-4 py-4">
+      <div className="shrink-0 border-t border-[#2d2d2d] bg-[#1e1e1e] px-4 py-4">
         <button
           onClick={onStartProcessing}
           disabled={selectedForProcessCount === 0 || !options.outputDir || isProcessing}

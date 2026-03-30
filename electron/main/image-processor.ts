@@ -175,6 +175,10 @@ export interface ProcessImageResult {
 export interface SliceImageGridOptions extends ProcessImageOptions {
   rows: number
   cols: number
+  /** Optional custom slice lines (fractions 0.0 to 1.0) for X axis (vertical lines) */
+  xLines?: number[]
+  /** Optional custom slice lines (fractions 0.0 to 1.0) for Y axis (horizontal lines) */
+  yLines?: number[]
 }
 
 export interface SliceImageGridResult {
@@ -260,10 +264,27 @@ export function sanitizeSliceImageGridOptions(raw: unknown): SliceImageGridOptio
   if (rows < 1 || cols < 1) return null
   if (rows > 64 || cols > 64) return null
 
+  const xLinesRaw = o.xLines
+  const yLinesRaw = o.yLines
+  let xLines: number[] | undefined
+  let yLines: number[] | undefined
+  if (Array.isArray(xLinesRaw)) {
+    xLines = xLinesRaw
+      .filter((v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1)
+      .sort((a, b) => a - b)
+  }
+  if (Array.isArray(yLinesRaw)) {
+    yLines = yLinesRaw
+      .filter((v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1)
+      .sort((a, b) => a - b)
+  }
+
   return {
     ...sanitizeProcessImageOptions(raw),
     rows,
     cols,
+    xLines,
+    yLines,
   }
 }
 
@@ -340,6 +361,32 @@ function computeGridRects(
       left += w
     }
     top += h
+  }
+  return rects
+}
+
+function computeCustomGridRects(
+  width: number,
+  height: number,
+  xLines: number[],
+  yLines: number[],
+): ExtractRect[] {
+  const rects: ExtractRect[] = []
+  const xs = [0, ...xLines.map((f) => Math.round(f * width)), width]
+  const ys = [0, ...yLines.map((f) => Math.round(f * height)), height]
+
+  for (let r = 0; r < ys.length - 1; r++) {
+    const top = ys[r]
+    const bottom = ys[r + 1]
+    const h = bottom - top
+    for (let c = 0; c < xs.length - 1; c++) {
+      const left = xs[c]
+      const right = xs[c + 1]
+      const w = right - left
+      if (w > 0 && h > 0) {
+        rects.push({ left, top, width: w, height: h, row: r, col: c })
+      }
+    }
   }
   return rects
 }
@@ -534,7 +581,13 @@ export async function sliceImageGrid(
       return { success: false, error: 'Failed to read image dimensions' }
     }
 
-    const rects = computeGridRects(w, h, options.rows, options.cols)
+    let rects: ExtractRect[]
+    if (options.xLines && options.yLines) {
+      rects = computeCustomGridRects(w, h, options.xLines, options.yLines)
+    } else {
+      rects = computeGridRects(w, h, options.rows, options.cols)
+    }
+
     if (rects.length === 0) {
       return { success: false, error: 'Invalid grid slicing geometry' }
     }
