@@ -59,5 +59,7 @@ npm test             # Vitest
 
 ## 人类贡献者
 
-- PR 前请运行：`npm run typecheck && npm run lint && npm run format:check`。
+- PR 前请运行：**`npm run validate`**（依次：`typecheck` → `lint` → `format:check` → `test`，与 CI `quality` 工作流一致）。
+- 克隆后 `npm install` 会执行 **Husky** `prepare`；提交前 **pre-commit** 钩子会对**暂存文件**运行 **lint-staged**（`eslint --fix --max-warnings 0` + `prettier --write`）。
+- 代码风格约定：**`.editorconfig`**（字符集、缩进、换行、尾随空格）、**`.prettierrc.json`**（分号/引号/行长等）、**`eslint.config.js`**（与 Prettier 通过 `eslint-config-prettier` 关闭冲突规则）。
 - 重大行为或数据模型变更请同步更新 `docs/` 与本文档相关小节。

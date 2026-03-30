@@ -21,7 +21,7 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
         <Sparkles className="w-6 h-6 text-blue-500" />
         PicaFlux
       </div>
-      
+
       <nav className="flex-1 px-4 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon
@@ -34,7 +34,7 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
                 'w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium bg-transparent text-left',
                 isActive
                   ? 'bg-blue-500/10 text-blue-500'
-                  : 'text-gray-300 hover:bg-[#2d2d2d] hover:text-white'
+                  : 'text-gray-300 hover:bg-[#2d2d2d] hover:text-white',
               )}
             >
               <Icon className="w-5 h-5" />
@@ -52,7 +52,7 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
             'w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium bg-transparent text-left',
             activeTab === 'settings'
               ? 'bg-blue-500/10 text-blue-500'
-              : 'text-gray-300 hover:bg-[#2d2d2d] hover:text-white'
+              : 'text-gray-300 hover:bg-[#2d2d2d] hover:text-white',
           )}
         >
           <Settings className="w-5 h-5" />

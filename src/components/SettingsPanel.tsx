@@ -348,8 +348,12 @@ export function SettingsPanel({
 
         <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
           <div className="border-b border-[#2d2d2d] px-3 py-2">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">图像处理</p>
-            <p className="mt-0.5 text-[10px] leading-snug text-gray-600">导出时按顺序应用；中间预览可显示固定透明区域</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+              图像处理
+            </p>
+            <p className="mt-0.5 text-[10px] leading-snug text-gray-600">
+              导出时按顺序应用；中间预览可显示固定透明区域
+            </p>
           </div>
           <div className="divide-y divide-[#2d2d2d]">
             <div className="flex items-center justify-between gap-3 px-3 py-3">

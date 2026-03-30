@@ -1,4 +1,8 @@
-import type { BackgroundRemovalBackendId, BackgroundRemovalBackendMeta, IBackgroundRemovalBackend } from './types'
+import type {
+  BackgroundRemovalBackendId,
+  BackgroundRemovalBackendMeta,
+  IBackgroundRemovalBackend,
+} from './types'
 import { ImglyBackgroundRemovalBackend } from './backends/imgly-backend'
 
 const backends = new Map<BackgroundRemovalBackendId, IBackgroundRemovalBackend>()
@@ -20,13 +24,13 @@ export function registerBackend(backend: IBackgroundRemovalBackend): void {
 }
 
 export function getBackgroundRemovalBackend(
-  id?: BackgroundRemovalBackendId
+  id?: BackgroundRemovalBackendId,
 ): IBackgroundRemovalBackend {
   const resolved = id && backends.has(id) ? id : DEFAULT_BACKGROUND_REMOVAL_BACKEND_ID
   const backend = backends.get(resolved)
   if (!backend) {
     throw new Error(
-      `Unknown background removal backend "${String(id)}". Registered: ${listBackgroundRemovalBackendIds().join(', ') || '(none)'}`
+      `Unknown background removal backend "${String(id)}". Registered: ${listBackgroundRemovalBackendIds().join(', ') || '(none)'}`,
     )
   }
   return backend

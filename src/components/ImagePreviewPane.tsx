@@ -114,8 +114,7 @@ export function ImagePreviewPane({
   const rotateDeg = rotateQuarterTurns * 90
   const prevRotateDegRef = useRef(rotateDeg)
   const rotateDelta = Math.abs(rotateDeg - prevRotateDegRef.current)
-  const transformTransition =
-    rotateDelta > 180 ? 'none' : 'transform 0.2s ease'
+  const transformTransition = rotateDelta > 180 ? 'none' : 'transform 0.2s ease'
 
   useLayoutEffect(() => {
     prevRotateDegRef.current = rotateDeg

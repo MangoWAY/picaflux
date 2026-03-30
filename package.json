@@ -3,9 +3,17 @@
   "version": "0.1.0",
   "main": "dist-electron/main/index.js",
   "description": "PicaFlux — AI-era open creative asset hub (Electron + React + TypeScript).",
-  "author": "",
+  "author": "PicaFlux contributors",
   "license": "MIT",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MangoWAY/picaflux.git"
+  },
+  "homepage": "https://github.com/MangoWAY/picaflux#readme",
+  "bugs": {
+    "url": "https://github.com/MangoWAY/picaflux/issues"
+  },
   "debug": {
     "env": {
       "VITE_DEV_SERVER_URL": "http://127.0.0.1:7777/"
@@ -22,7 +30,9 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "validate": "npm run typecheck && npm run lint && npm run format:check && npm test",
+    "prepare": "husky"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
@@ -56,6 +66,8 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^15.15.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "postcss": "^8.4.49",
     "postcss-import": "^16.1.0",
     "prettier": "^3.5.3",

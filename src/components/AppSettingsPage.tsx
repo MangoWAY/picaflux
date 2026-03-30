@@ -32,7 +32,7 @@ export function AppSettingsPage({
   const selectValue =
     backends.some((b) => b.id === backgroundRemovalBackendId) && backends.length > 0
       ? backgroundRemovalBackendId
-      : backends[0]?.id ?? backgroundRemovalBackendId
+      : (backends[0]?.id ?? backgroundRemovalBackendId)
 
   return (
     <div className="flex-1 flex flex-col bg-[#121212] min-h-0 text-gray-300">

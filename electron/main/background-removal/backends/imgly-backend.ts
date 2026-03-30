@@ -18,7 +18,7 @@ export class ImglyBackgroundRemovalBackend implements IBackgroundRemovalBackend 
     const mod = await import('@imgly/background-removal-node')
     const removeBackground = mod.removeBackground as (
       src: string,
-      config?: ImglyConfig
+      config?: ImglyConfig,
     ) => Promise<Blob>
 
     const config: ImglyConfig = {
