@@ -92,6 +92,12 @@ contextBridge.exposeInMainWorld('picafluxAPI', {
       height?: number
       format?: string
     } | null>,
+  getImageAlphaPreview: (filePath: string, options?: { maxSize?: number }) =>
+    ipcRenderer.invoke('image:getAlphaPreview', filePath, options ?? {}) as Promise<{
+      success: boolean
+      dataUrl?: string
+      error?: string
+    }>,
   listBackgroundRemovalBackends: () =>
     ipcRenderer.invoke('image:listBackgroundRemovalBackends') as Promise<
       { id: string; displayName: string }[]

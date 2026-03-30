@@ -14,7 +14,9 @@ import os from 'node:os'
 import { update } from './update'
 import {
   processImage,
+  getImageAlphaPreviewDataUrl,
   getImageFileInfo,
+  sanitizeGetImageAlphaPreviewOptions,
   sanitizeProcessImageOptions,
   sanitizeSliceImageGridOptions,
   sliceImageGrid,
@@ -217,6 +219,13 @@ ipcMain.handle('image:getFileInfo', async (_, inputPath: string) => {
     return null
   }
   return await getImageFileInfo(inputPath)
+})
+
+ipcMain.handle('image:getAlphaPreview', async (_, inputPath: string, options: unknown) => {
+  if (typeof inputPath !== 'string' || !inputPath) {
+    return { success: false, error: 'Invalid path arguments' }
+  }
+  return await getImageAlphaPreviewDataUrl(inputPath, sanitizeGetImageAlphaPreviewOptions(options))
 })
 
 ipcMain.handle('image:listBackgroundRemovalBackends', () => {

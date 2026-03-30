@@ -31,6 +31,14 @@ interface Window {
       height?: number
       format?: string
     } | null>
+    getImageAlphaPreview: (
+      filePath: string,
+      options?: { maxSize?: number },
+    ) => Promise<{
+      success: boolean
+      dataUrl?: string
+      error?: string
+    }>
     listBackgroundRemovalBackends: () => Promise<{ id: string; displayName: string }[]>
     platform: NodeJS.Platform
     openVideoFiles: () => Promise<string[]>
