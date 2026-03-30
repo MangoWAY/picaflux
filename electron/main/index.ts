@@ -12,7 +12,13 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
 import { update } from './update'
-import { processImage, getImageFileInfo, sanitizeProcessImageOptions } from './image-processor'
+import {
+  processImage,
+  getImageFileInfo,
+  sanitizeProcessImageOptions,
+  sanitizeSliceImageGridOptions,
+  sliceImageGrid,
+} from './image-processor'
 import { processVideo, getVideoFileInfo, cancelVideoTask } from './video-processor'
 import { getModel3dFileInfo, save3dThumbnailPng, processGlbConvert } from './gltf-3d-processor'
 import {
@@ -189,6 +195,20 @@ ipcMain.handle(
       return { success: false, error: 'Invalid path arguments' }
     }
     return await processImage(inputPath, outputDir, sanitizeProcessImageOptions(options))
+  },
+)
+
+ipcMain.handle(
+  'image:sliceGrid',
+  async (_, inputPath: string, outputDir: string, options: unknown) => {
+    if (typeof inputPath !== 'string' || typeof outputDir !== 'string') {
+      return { success: false, error: 'Invalid path arguments' }
+    }
+    const cleaned = sanitizeSliceImageGridOptions(options)
+    if (!cleaned) {
+      return { success: false, error: 'Invalid slice options' }
+    }
+    return await sliceImageGrid(inputPath, outputDir, cleaned)
   },
 )
 

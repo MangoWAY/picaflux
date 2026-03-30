@@ -15,6 +15,15 @@ interface Window {
       outputPath?: string
       error?: string
     }>
+    sliceImageGrid: (
+      inputPath: string,
+      outputDir: string,
+      options: unknown,
+    ) => Promise<{
+      success: boolean
+      outputPaths?: string[]
+      error?: string
+    }>
     getPathForFile: (file: File) => string
     getImageFileInfo: (filePath: string) => Promise<{
       size: number
