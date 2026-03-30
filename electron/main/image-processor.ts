@@ -191,6 +191,12 @@ export interface ImageFileInfo {
   format?: string
 }
 
+export interface ImageAlphaPreviewResult {
+  success: boolean
+  dataUrl?: string
+  error?: string
+}
+
 export async function getImageFileInfo(inputPath: string): Promise<ImageFileInfo | null> {
   try {
     const stat = await fs.stat(inputPath)
@@ -203,6 +209,37 @@ export async function getImageFileInfo(inputPath: string): Promise<ImageFileInfo
     }
   } catch {
     return null
+  }
+}
+
+export function sanitizeGetImageAlphaPreviewOptions(raw: unknown): { maxSize: number } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { maxSize: 1024 }
+  }
+  const o = raw as Record<string, unknown>
+  const maxSizeRaw = o.maxSize
+  const maxSize =
+    typeof maxSizeRaw === 'number' && Number.isFinite(maxSizeRaw) ? Math.floor(maxSizeRaw) : 1024
+  return { maxSize: Math.min(4096, Math.max(64, maxSize)) }
+}
+
+export async function getImageAlphaPreviewDataUrl(
+  inputPath: string,
+  options: { maxSize: number },
+): Promise<ImageAlphaPreviewResult> {
+  try {
+    const maxSize = options.maxSize
+    const buf = await sharp(inputPath)
+      .ensureAlpha()
+      .resize({ width: maxSize, height: maxSize, fit: 'inside', withoutEnlargement: true })
+      .extractChannel(3)
+      .png()
+      .toBuffer()
+    return { success: true, dataUrl: `data:image/png;base64,${buf.toString('base64')}` }
+  } catch (error: unknown) {
+    console.error('Error building alpha preview:', error)
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return { success: false, error: message }
   }
 }
 

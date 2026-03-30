@@ -127,6 +127,15 @@ export function ImagePreviewPane({
 
   const previewSrc = previewImage?.previewUrl
 
+  const [previewBgMode, setPreviewBgMode] = useState<'checker' | 'solid'>('checker')
+  const [checkerLight, setCheckerLight] = useState('#cfcfcf')
+  const [checkerDark, setCheckerDark] = useState('#9b9b9b')
+  const [solidBg, setSolidBg] = useState('#1a1a1a')
+
+  const [showAlpha, setShowAlpha] = useState(false)
+  const [alphaDataUrl, setAlphaDataUrl] = useState<string | null>(null)
+  const [alphaError, setAlphaError] = useState<string | null>(null)
+
   const imgRef = useRef<HTMLImageElement>(null)
   const [imgLayout, setImgLayout] = useState<{ scale: number; ox: number; oy: number } | null>(null)
 
@@ -174,6 +183,44 @@ export function ImagePreviewPane({
       ? pixelRectFromWatermarkPercent(fixedWatermarkRegionPercent, nw, nh)
       : null
 
+  useEffect(() => {
+    let cancelled = false
+    setAlphaError(null)
+    setAlphaDataUrl(null)
+    if (!showAlpha || !previewImage?.path) return
+    ;(async () => {
+      try {
+        const r = await window.picafluxAPI.getImageAlphaPreview(previewImage.path, {
+          maxSize: 1400,
+        })
+        if (cancelled) return
+        if (!r.success || !r.dataUrl) {
+          setAlphaError(r.error || 'Alpha 预览生成失败')
+          return
+        }
+        setAlphaDataUrl(r.dataUrl)
+      } catch (e: unknown) {
+        if (cancelled) return
+        setAlphaError(e instanceof Error ? e.message : 'Alpha 预览生成失败')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [showAlpha, previewImage?.path])
+
+  const checkerStyle: React.CSSProperties = {
+    backgroundColor: checkerLight,
+    backgroundImage: [
+      `linear-gradient(45deg, ${checkerDark} 25%, transparent 25%)`,
+      `linear-gradient(-45deg, ${checkerDark} 25%, transparent 25%)`,
+      `linear-gradient(45deg, transparent 75%, ${checkerDark} 75%)`,
+      `linear-gradient(-45deg, transparent 75%, ${checkerDark} 75%)`,
+    ].join(', '),
+    backgroundSize: '24px 24px',
+    backgroundPosition: '0 0, 0 12px, 12px -12px, -12px 0px',
+  }
+
   return (
     <div
       className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#121212]"
@@ -212,8 +259,11 @@ export function ImagePreviewPane({
           </div>
         ) : previewImage ? (
           <div className="flex h-full min-h-0 flex-col gap-3">
-            <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#1a1a1a]">
-              <div className="relative flex h-full min-h-0 w-full min-w-0 items-center justify-center p-4">
+            <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-[#2d2d2d]">
+              <div
+                className="relative flex h-full min-h-0 w-full min-w-0 items-center justify-center p-4"
+                style={previewBgMode === 'checker' ? checkerStyle : { backgroundColor: solidBg }}
+              >
                 {previewSrc ? (
                   <div
                     className="relative flex max-h-full max-w-full min-h-0 min-w-0"
@@ -221,11 +271,18 @@ export function ImagePreviewPane({
                   >
                     <img
                       ref={imgRef}
-                      src={previewSrc}
+                      src={showAlpha ? alphaDataUrl || '' : previewSrc}
                       alt={previewImage.name}
                       onLoad={updateImgLayout}
                       className="block h-auto w-auto max-h-full max-w-full object-contain"
                     />
+                    {showAlpha && !alphaDataUrl ? (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="rounded-md bg-black/60 px-3 py-2 text-xs text-gray-200">
+                          {alphaError ? `Alpha 预览失败：${alphaError}` : '生成 Alpha 预览中...'}
+                        </div>
+                      </div>
+                    ) : null}
                     {fixedWatermarkPixelRect && imgLayout ? (
                       <div
                         className="pointer-events-none absolute z-10 box-border border-2 border-dashed border-sky-400/95 bg-sky-400/15 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
@@ -246,6 +303,66 @@ export function ImagePreviewPane({
                 ) : (
                   <FileImage className="h-24 w-24 text-gray-600" />
                 )}
+              </div>
+            </div>
+            <div className="shrink-0 rounded-xl border border-[#2d2d2d] bg-[#181818] px-3 py-2">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
+                <label className="flex items-center gap-2">
+                  <span className="text-gray-500">背景</span>
+                  <select
+                    value={previewBgMode}
+                    onChange={(e) => setPreviewBgMode(e.target.value as 'checker' | 'solid')}
+                    className="rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1 text-xs text-gray-200"
+                  >
+                    <option value="checker">棋盘格</option>
+                    <option value="solid">纯色</option>
+                  </select>
+                </label>
+                {previewBgMode === 'checker' ? (
+                  <>
+                    <label className="flex items-center gap-2">
+                      <span className="text-gray-500">浅</span>
+                      <input
+                        type="color"
+                        value={checkerLight}
+                        onChange={(e) => setCheckerLight(e.target.value)}
+                        className="h-6 w-8 cursor-pointer rounded border border-[#3d3d3d] bg-[#121212]"
+                        aria-label="棋盘格浅色"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <span className="text-gray-500">深</span>
+                      <input
+                        type="color"
+                        value={checkerDark}
+                        onChange={(e) => setCheckerDark(e.target.value)}
+                        className="h-6 w-8 cursor-pointer rounded border border-[#3d3d3d] bg-[#121212]"
+                        aria-label="棋盘格深色"
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <label className="flex items-center gap-2">
+                    <span className="text-gray-500">颜色</span>
+                    <input
+                      type="color"
+                      value={solidBg}
+                      onChange={(e) => setSolidBg(e.target.value)}
+                      className="h-6 w-8 cursor-pointer rounded border border-[#3d3d3d] bg-[#121212]"
+                      aria-label="背景纯色"
+                    />
+                  </label>
+                )}
+
+                <label className="ml-auto flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={showAlpha}
+                    onChange={(e) => setShowAlpha(e.target.checked)}
+                    className="rounded border-[#3d3d3d] bg-[#121212] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                  />
+                  <span className="text-gray-300">显示 Alpha 通道</span>
+                </label>
               </div>
             </div>
             <div className="shrink-0 space-y-1 text-sm text-gray-400">
