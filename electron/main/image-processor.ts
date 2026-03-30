@@ -172,6 +172,17 @@ export interface ProcessImageResult {
   error?: string
 }
 
+export interface SliceImageGridOptions extends ProcessImageOptions {
+  rows: number
+  cols: number
+}
+
+export interface SliceImageGridResult {
+  success: boolean
+  outputPaths?: string[]
+  error?: string
+}
+
 export interface ImageFileInfo {
   size: number
   width?: number
@@ -195,6 +206,107 @@ export async function getImageFileInfo(inputPath: string): Promise<ImageFileInfo
   }
 }
 
+export function sanitizeSliceImageGridOptions(raw: unknown): SliceImageGridOptions | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null
+  }
+  const o = raw as Record<string, unknown>
+
+  const rowsRaw = o.rows
+  const colsRaw = o.cols
+  const rows =
+    typeof rowsRaw === 'number' && Number.isFinite(rowsRaw) ? Math.floor(rowsRaw) : undefined
+  const cols =
+    typeof colsRaw === 'number' && Number.isFinite(colsRaw) ? Math.floor(colsRaw) : undefined
+
+  if (!rows || !cols) return null
+  if (rows < 1 || cols < 1) return null
+  if (rows > 64 || cols > 64) return null
+
+  return {
+    ...sanitizeProcessImageOptions(raw),
+    rows,
+    cols,
+  }
+}
+
+function resolveOutputFormatAndExt(
+  inputPath: string,
+  requested: ProcessImageOptions['format'] | undefined,
+): { format: 'png' | 'jpeg' | 'webp' | 'avif'; outputExt: string } {
+  const parsedPath = path.parse(inputPath)
+  const extToFormat: Record<string, 'png' | 'jpeg' | 'webp' | 'avif'> = {
+    png: 'png',
+    jpeg: 'jpeg',
+    jpg: 'jpeg',
+    webp: 'webp',
+    avif: 'avif',
+  }
+  let format: 'png' | 'jpeg' | 'webp' | 'avif'
+  if ((requested || 'original') === 'original') {
+    const ext = parsedPath.ext.toLowerCase().replace('.', '')
+    format = extToFormat[ext] ?? 'png'
+  } else {
+    format = requested as 'png' | 'jpeg' | 'webp' | 'avif'
+  }
+  const outputExt = format === 'jpeg' ? 'jpg' : format
+  return { format, outputExt }
+}
+
+function applyFormatAndQuality(
+  pipeline: sharp.Sharp,
+  format: 'png' | 'jpeg' | 'webp' | 'avif',
+  quality: number,
+): sharp.Sharp {
+  switch (format) {
+    case 'png':
+      return pipeline.png({ quality })
+    case 'jpeg':
+      return pipeline.jpeg({ quality })
+    case 'webp':
+      return pipeline.webp({ quality })
+    case 'avif':
+      return pipeline.avif({ quality })
+  }
+}
+
+type ExtractRect = {
+  left: number
+  top: number
+  width: number
+  height: number
+  row: number
+  col: number
+}
+
+function computeGridRects(
+  width: number,
+  height: number,
+  rows: number,
+  cols: number,
+): ExtractRect[] {
+  const rects: ExtractRect[] = []
+  const baseW = Math.floor(width / cols)
+  const baseH = Math.floor(height / rows)
+  const remW = width - baseW * cols
+  const remH = height - baseH * rows
+
+  let top = 0
+  for (let r = 0; r < rows; r++) {
+    const h = baseH + (r === rows - 1 ? remH : 0)
+    let left = 0
+    for (let c = 0; c < cols; c++) {
+      const w = baseW + (c === cols - 1 ? remW : 0)
+      if (w > 0 && h > 0) {
+        rects.push({ left, top, width: w, height: h, row: r, col: c })
+      }
+      left += w
+    }
+    top += h
+  }
+  return rects
+}
+
 export async function processImage(
   inputPath: string,
   outputDir: string,
@@ -207,23 +319,7 @@ export async function processImage(
     const parsedPath = path.parse(inputPath)
     const requested = options.format || 'original'
 
-    const extToFormat: Record<string, 'png' | 'jpeg' | 'webp' | 'avif'> = {
-      png: 'png',
-      jpeg: 'jpeg',
-      jpg: 'jpeg',
-      webp: 'webp',
-      avif: 'avif',
-    }
-
-    let format: 'png' | 'jpeg' | 'webp' | 'avif'
-    if (requested === 'original') {
-      const ext = parsedPath.ext.toLowerCase().replace('.', '')
-      format = extToFormat[ext] ?? 'png'
-    } else {
-      format = requested
-    }
-
-    const outputExt = format === 'jpeg' ? 'jpg' : format
+    const { format, outputExt } = resolveOutputFormatAndExt(inputPath, requested)
     const outputFileName = `${parsedPath.name}_processed.${outputExt}`
     const outputPath = path.join(outputDir, outputFileName)
 
@@ -300,20 +396,7 @@ export async function processImage(
 
     // Format & Quality
     const quality = options.quality || 80
-    switch (format) {
-      case 'png':
-        pipeline = pipeline.png({ quality })
-        break
-      case 'jpeg':
-        pipeline = pipeline.jpeg({ quality })
-        break
-      case 'webp':
-        pipeline = pipeline.webp({ quality })
-        break
-      case 'avif':
-        pipeline = pipeline.avif({ quality })
-        break
-    }
+    pipeline = applyFormatAndQuality(pipeline, format, quality)
 
     await pipeline.toFile(outputPath)
 
@@ -328,5 +411,110 @@ export async function processImage(
       success: false,
       error: message,
     }
+  }
+}
+
+export async function sliceImageGrid(
+  inputPath: string,
+  outputDir: string,
+  options: SliceImageGridOptions,
+): Promise<SliceImageGridResult> {
+  try {
+    await fs.mkdir(outputDir, { recursive: true })
+
+    const parsedPath = path.parse(inputPath)
+    const requested = options.format || 'original'
+    const { format, outputExt } = resolveOutputFormatAndExt(inputPath, requested)
+    const quality = options.quality || 80
+
+    let pipelineInput: string | Buffer = inputPath
+    if (options.removeBackground) {
+      try {
+        const backend = getBackgroundRemovalBackend(options.backgroundRemovalBackendId)
+        pipelineInput = await backend.removeFromFile(inputPath)
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Background removal failed'
+        console.error('Background removal error:', error)
+        return { success: false, error: message }
+      }
+    }
+
+    if (options.clearFixedWatermark) {
+      try {
+        const region = options.fixedWatermarkRegion ?? { ...DEFAULT_FIXED_WATERMARK_REGION_PERCENT }
+        pipelineInput = await applyFixedWatermarkTransparency(pipelineInput, region)
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Watermark region clear failed'
+        console.error('Fixed watermark clear error:', error)
+        return { success: false, error: message }
+      }
+    }
+
+    let base = sharp(pipelineInput)
+
+    const rq =
+      typeof options.rotateQuarterTurns === 'number' && Number.isFinite(options.rotateQuarterTurns)
+        ? ((((Math.floor(options.rotateQuarterTurns) % 4) + 4) % 4) as 0 | 1 | 2 | 3)
+        : 0
+    if (rq !== 0) base = base.rotate(rq * 90)
+    if (options.flipHorizontal === true) base = base.flop()
+    if (options.flipVertical === true) base = base.flip()
+
+    const hasPixelResize =
+      (typeof options.width === 'number' && options.width > 0) ||
+      (typeof options.height === 'number' && options.height > 0)
+    if (hasPixelResize) {
+      const keepAR = options.keepAspectRatio !== false
+      base = base.resize({
+        width: options.width,
+        height: options.height,
+        fit: keepAR ? 'inside' : 'fill',
+        withoutEnlargement: true,
+      })
+    } else if (
+      typeof options.scalePercent === 'number' &&
+      Number.isFinite(options.scalePercent) &&
+      options.scalePercent !== 100
+    ) {
+      const p = Math.min(400, Math.max(1, Math.round(options.scalePercent)))
+      const meta0 = await base.clone().metadata()
+      const w0 = meta0.width
+      const h0 = meta0.height
+      if (w0 && h0) {
+        const factor = p / 100
+        const newW = Math.max(1, Math.round(w0 * factor))
+        base = base.resize({
+          width: newW,
+          withoutEnlargement: p <= 100,
+        })
+      }
+    }
+
+    const meta = await base.clone().metadata()
+    const w = meta.width ?? 0
+    const h = meta.height ?? 0
+    if (!w || !h) {
+      return { success: false, error: 'Failed to read image dimensions' }
+    }
+
+    const rects = computeGridRects(w, h, options.rows, options.cols)
+    if (rects.length === 0) {
+      return { success: false, error: 'Invalid grid slicing geometry' }
+    }
+
+    const outputs: string[] = []
+    for (const r of rects) {
+      const outName = `${parsedPath.name}_slice_${options.rows}x${options.cols}_r${r.row + 1}c${r.col + 1}.${outputExt}`
+      const outPath = path.join(outputDir, outName)
+      const p = applyFormatAndQuality(base.clone().extract(r), format, quality)
+      await p.toFile(outPath)
+      outputs.push(outPath)
+    }
+
+    return { success: true, outputPaths: outputs }
+  } catch (error: unknown) {
+    console.error('Error slicing image:', error)
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return { success: false, error: message }
   }
 }

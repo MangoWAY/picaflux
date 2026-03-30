@@ -25,6 +25,12 @@ contextBridge.exposeInMainWorld('picafluxAPI', {
   openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
   processImage: (inputPath: string, outputDir: string, options: unknown) =>
     ipcRenderer.invoke('image:process', inputPath, outputDir, options),
+  sliceImageGrid: (inputPath: string, outputDir: string, options: unknown) =>
+    ipcRenderer.invoke('image:sliceGrid', inputPath, outputDir, options) as Promise<{
+      success: boolean
+      outputPaths?: string[]
+      error?: string
+    }>,
   openVideoFiles: () => ipcRenderer.invoke('dialog:openVideoFiles') as Promise<string[]>,
   processVideo: (taskId: string, inputPath: string, outputDir: string, options: unknown) =>
     ipcRenderer.invoke('video:process', taskId, inputPath, outputDir, options) as Promise<{

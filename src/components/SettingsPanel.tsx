@@ -22,6 +22,10 @@ export interface ProcessOptions {
   rotateQuarterTurns: number
   flipHorizontal: boolean
   flipVertical: boolean
+  /** 切图：按网格均分输出 */
+  sliceEnabled: boolean
+  sliceRows: string
+  sliceCols: string
   /** 百分比缩放与像素缩放二选一 */
   resizeMode: 'percent' | 'pixels'
   resizePercentPreset: ResizePercentPreset
@@ -449,6 +453,64 @@ export function SettingsPanel({
             >
               <FolderOpen className="w-5 h-5" />
             </button>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
+          <div className="border-b border-[#2d2d2d] px-3 py-2">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">切图</p>
+            <p className="mt-0.5 text-[10px] leading-snug text-gray-600">
+              将一张图按行×列均分输出；开启后会输出多张图片
+            </p>
+          </div>
+          <div className="divide-y divide-[#2d2d2d]">
+            <div className="flex items-center justify-between gap-3 px-3 py-3">
+              <div className="min-w-0">
+                <span className="text-sm font-medium text-gray-200">启用切图</span>
+                <p className="mt-0.5 text-[10px] text-gray-500">适合 4×4、3×3 等网格素材</p>
+              </div>
+              <PanelToggle
+                checked={options.sliceEnabled}
+                onChange={(v) => updateOption('sliceEnabled', v)}
+                ariaLabel="启用切图"
+              />
+            </div>
+            {options.sliceEnabled && (
+              <div className="space-y-3 px-3 py-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <label className="text-gray-500">
+                    行数
+                    <input
+                      type="number"
+                      min={1}
+                      max={64}
+                      step={1}
+                      value={options.sliceRows}
+                      onChange={(e) => updateOption('sliceRows', e.target.value)}
+                      className="mt-1 w-full rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-sm text-white"
+                    />
+                  </label>
+                  <label className="text-gray-500">
+                    列数
+                    <input
+                      type="number"
+                      min={1}
+                      max={64}
+                      step={1}
+                      value={options.sliceCols}
+                      onChange={(e) => updateOption('sliceCols', e.target.value)}
+                      className="mt-1 w-full rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-sm text-white"
+                    />
+                  </label>
+                </div>
+                <p className="text-[10px] leading-relaxed text-gray-600">
+                  输出命名：
+                  <span className="text-gray-500">
+                    name_slice_行x列_r{`{row}`}c{`{col}`}.ext
+                  </span>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

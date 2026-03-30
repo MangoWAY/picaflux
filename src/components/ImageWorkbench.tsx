@@ -58,6 +58,9 @@ export function ImageWorkbench({
     rotateQuarterTurns: 0,
     flipHorizontal: false,
     flipVertical: false,
+    sliceEnabled: false,
+    sliceRows: '4',
+    sliceCols: '4',
     resizeMode: 'percent',
     resizePercentPreset: 'none',
     resizeCustomPercentStr: '100',
@@ -251,13 +254,23 @@ export function ImageWorkbench({
         : undefined,
     }
 
+    const parseGridDim = (s: string, fallback: number) => {
+      const n = parseInt(s, 10)
+      if (!Number.isFinite(n)) return fallback
+      return Math.min(64, Math.max(1, n))
+    }
+    const sliceRows = parseGridDim(options.sliceRows, 4)
+    const sliceCols = parseGridDim(options.sliceCols, 4)
+
     for (const img of batch) {
       try {
-        const result = await window.picafluxAPI.processImage(
-          img.path,
-          options.outputDir,
-          processOpts,
-        )
+        const result = options.sliceEnabled
+          ? await window.picafluxAPI.sliceImageGrid(img.path, options.outputDir, {
+              ...processOpts,
+              rows: sliceRows,
+              cols: sliceCols,
+            })
+          : await window.picafluxAPI.processImage(img.path, options.outputDir, processOpts)
 
         setImages((prev) =>
           prev.map((p) =>
