@@ -50,6 +50,10 @@ export interface ProcessOptions {
   /** 与中间预览一致的裁剪框（相对当前「视觉」宽高的 0–1 归一化，含旋转/镜像后） */
   cropEnabled: boolean
   cropNorm: { x: number; y: number; w: number; h: number }
+  /** 裁掉完全透明的边缘像素（用于减小导出尺寸） */
+  trimTransparent: boolean
+  /** 额外保留的透明边（像素） */
+  trimPaddingPx: string
 }
 
 const OUTPUT_FORMAT_VALUES: OutputFormatOption[] = ['original', 'png', 'jpeg', 'webp', 'avif']
@@ -257,6 +261,41 @@ export function SettingsPanel({
               >
                 重置为全图
               </button>
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
+          <div className="flex items-center justify-between gap-3 px-3 py-3">
+            <div className="min-w-0">
+              <span className="text-sm font-medium text-gray-200">Trim 透明边</span>
+              <p className="mt-0.5 text-[10px] text-gray-500">
+                裁剪掉四周完全透明的像素，默认额外保留 2px 透明边
+              </p>
+            </div>
+            <PanelToggle
+              checked={options.trimTransparent}
+              onChange={(v) => updateOption('trimTransparent', v)}
+              ariaLabel="Trim 透明边"
+            />
+          </div>
+          {options.trimTransparent && (
+            <div className="border-t border-[#2d2d2d] px-3 py-3">
+              <label className="flex items-center justify-between gap-3 text-xs text-gray-500">
+                <span className="shrink-0">边缘保留</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={512}
+                    step={1}
+                    value={options.trimPaddingPx}
+                    onChange={(e) => updateOption('trimPaddingPx', e.target.value)}
+                    className="w-20 rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+                  />
+                  <span className="shrink-0">px</span>
+                </div>
+              </label>
             </div>
           )}
         </div>

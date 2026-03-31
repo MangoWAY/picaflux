@@ -80,6 +80,8 @@ export function ImageWorkbench({
     watermarkHeightPct: FIXED_WATERMARK_DEFAULTS.heightPercent,
     cropEnabled: false,
     cropNorm: { x: 0, y: 0, w: 1, h: 1 },
+    trimTransparent: false,
+    trimPaddingPx: '2',
   })
 
   const imagePathsKey = useMemo(() => images.map((i) => i.path).join('\n'), [images])
@@ -264,6 +266,15 @@ export function ImageWorkbench({
               width: options.cropNorm.w,
               height: options.cropNorm.h,
             },
+          }
+        : {}),
+      ...(options.trimTransparent
+        ? {
+            trimTransparent: true,
+            trimPaddingPx: (() => {
+              const n = parseInt(String(options.trimPaddingPx), 10)
+              return Number.isFinite(n) ? Math.min(512, Math.max(0, n)) : 2
+            })(),
           }
         : {}),
     }

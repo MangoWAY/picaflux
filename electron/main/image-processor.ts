@@ -52,11 +52,22 @@ export interface ProcessImageOptions {
    * 在缩放、切片与编码之前执行 extract
    */
   crop?: NormalizedCropRect
+  /**
+   * 裁掉四周完全透明像素（alpha=0），用于减小导出尺寸；
+   * padding 为额外保留的透明边（像素）
+   */
+  trimTransparent?: boolean
+  trimPaddingPx?: number
 }
 
 function clampPercent(n: number, fallback: number): number {
   if (!Number.isFinite(n)) return fallback
   return Math.min(100, Math.max(0, n))
+}
+
+function sanitizeTrimPaddingPx(raw: unknown, fallback: number): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback
+  return Math.min(512, Math.max(0, Math.round(raw)))
 }
 
 const CROP_FULL_TOLERANCE = 1 / 512
@@ -112,6 +123,60 @@ async function applyNormalizedCrop(
   top = Math.max(0, Math.min(H - 1, top))
   width = Math.max(1, Math.min(W - left, width))
   height = Math.max(1, Math.min(H - top, height))
+  return pipeline.extract({ left, top, width, height })
+}
+
+async function applyTrimTransparent(
+  pipeline: sharp.Sharp,
+  paddingPx: number,
+): Promise<sharp.Sharp> {
+  const meta = await pipeline.metadata()
+  const W = meta.width ?? 0
+  const H = meta.height ?? 0
+  const hasAlpha = meta.hasAlpha === true
+  if (!W || !H || !hasAlpha) return pipeline
+
+  const { data, info } = await pipeline
+    .clone()
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const w = info.width ?? 0
+  const h = info.height ?? 0
+  const channels = info.channels ?? 0
+  if (!w || !h || channels < 4) return pipeline
+
+  let minX = w
+  let minY = h
+  let maxX = -1
+  let maxY = -1
+
+  // alpha is last channel in RGBA
+  for (let y = 0; y < h; y++) {
+    const row = y * w * channels
+    for (let x = 0; x < w; x++) {
+      const a = data[row + x * channels + 3]
+      if (a !== 0) {
+        if (x < minX) minX = x
+        if (y < minY) minY = y
+        if (x > maxX) maxX = x
+        if (y > maxY) maxY = y
+      }
+    }
+  }
+
+  // Fully transparent: keep original to avoid 1x1 surprises
+  if (maxX < 0 || maxY < 0) return pipeline
+
+  const pad = Math.max(0, Math.round(paddingPx))
+  const left = Math.max(0, minX - pad)
+  const top = Math.max(0, minY - pad)
+  const right = Math.min(w - 1, maxX + pad)
+  const bottom = Math.min(h - 1, maxY + pad)
+  const width = Math.max(1, right - left + 1)
+  const height = Math.max(1, bottom - top + 1)
+
+  if (left === 0 && top === 0 && width === w && height === h) return pipeline
   return pipeline.extract({ left, top, width, height })
 }
 
@@ -211,6 +276,8 @@ export function sanitizeProcessImageOptions(raw: unknown): ProcessImageOptions {
     ? sanitizeFixedWatermarkRegion(o.fixedWatermarkRegion)
     : undefined
   const crop = sanitizeNormalizedCropRect(o.crop)
+  const trimTransparent = o.trimTransparent === true
+  const trimPaddingPx = trimTransparent ? sanitizeTrimPaddingPx(o.trimPaddingPx, 2) : undefined
   let rotateQuarterTurns: number | undefined
   if (typeof o.rotateQuarterTurns === 'number' && Number.isFinite(o.rotateQuarterTurns)) {
     const n = Math.floor(o.rotateQuarterTurns) % 4
@@ -233,6 +300,8 @@ export function sanitizeProcessImageOptions(raw: unknown): ProcessImageOptions {
     clearFixedWatermark,
     fixedWatermarkRegion,
     crop,
+    trimTransparent,
+    trimPaddingPx,
   }
 }
 
@@ -520,6 +589,11 @@ export async function processImage(
       pipeline = await applyNormalizedCrop(pipeline, options.crop)
     }
 
+    if (options.trimTransparent) {
+      const pad = typeof options.trimPaddingPx === 'number' ? options.trimPaddingPx : 2
+      pipeline = await applyTrimTransparent(pipeline, pad)
+    }
+
     // Resize：优先像素尺寸；否则按比例缩放
     const hasPixelResize =
       (typeof options.width === 'number' && options.width > 0) ||
@@ -620,6 +694,11 @@ export async function sliceImageGrid(
 
     if (options.crop) {
       base = await applyNormalizedCrop(base, options.crop)
+    }
+
+    if (options.trimTransparent) {
+      const pad = typeof options.trimPaddingPx === 'number' ? options.trimPaddingPx : 2
+      base = await applyTrimTransparent(base, pad)
     }
 
     const hasPixelResize =
