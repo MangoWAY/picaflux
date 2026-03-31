@@ -17,6 +17,12 @@ export interface VideoFileInfoPayload {
   formatName?: string
   videoCodec?: string
   audioCodec?: string
+  /** overall bitrate in bits per second */
+  bitRateBps?: number
+  /** video stream bitrate in bits per second */
+  videoBitRateBps?: number
+  /** audio stream bitrate in bits per second */
+  audioBitRateBps?: number
   size: number
 }
 
@@ -70,6 +76,23 @@ export async function getVideoFileInfo(inputPath: string): Promise<VideoFileInfo
       const video = meta.streams.find((s) => s.codec_type === 'video')
       const audio = meta.streams.find((s) => s.codec_type === 'audio')
       const duration = parseFloat(String(meta.format.duration ?? '0')) || 0
+      const bitRateBps = (() => {
+        const raw = meta.format.bit_rate ?? video?.bit_rate ?? audio?.bit_rate ?? null
+        const n = typeof raw === 'number' ? raw : parseInt(String(raw ?? ''), 10)
+        if (Number.isFinite(n) && n > 0) return n
+        if (duration > 0 && st.size > 0) return Math.round((st.size * 8) / duration)
+        return undefined
+      })()
+      const videoBitRateBps = (() => {
+        const raw = video?.bit_rate ?? null
+        const n = typeof raw === 'number' ? raw : parseInt(String(raw ?? ''), 10)
+        return Number.isFinite(n) && n > 0 ? n : undefined
+      })()
+      const audioBitRateBps = (() => {
+        const raw = audio?.bit_rate ?? null
+        const n = typeof raw === 'number' ? raw : parseInt(String(raw ?? ''), 10)
+        return Number.isFinite(n) && n > 0 ? n : undefined
+      })()
       resolve({
         durationSec: duration,
         width: video?.width,
@@ -77,6 +100,9 @@ export async function getVideoFileInfo(inputPath: string): Promise<VideoFileInfo
         formatName: meta.format.format_long_name || meta.format.format_name,
         videoCodec: video?.codec_name,
         audioCodec: audio?.codec_name,
+        bitRateBps,
+        videoBitRateBps,
+        audioBitRateBps,
         size: st.size,
       })
     })

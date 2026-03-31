@@ -60,6 +60,9 @@ interface Window {
       formatName?: string
       videoCodec?: string
       audioCodec?: string
+      bitRateBps?: number
+      videoBitRateBps?: number
+      audioBitRateBps?: number
       size: number
     } | null>
     cancelVideoTask: (taskId: string) => Promise<boolean>

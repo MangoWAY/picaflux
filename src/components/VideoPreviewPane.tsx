@@ -23,6 +23,14 @@ function formatDuration(sec?: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+function formatBitrate(bps?: number): string {
+  if (bps == null || !Number.isFinite(bps) || bps <= 0) return '—'
+  const kbps = bps / 1000
+  if (kbps < 1000) return `${kbps.toFixed(0)} kbps`
+  const mbps = kbps / 1000
+  return `${mbps.toFixed(2)} Mbps`
+}
+
 interface VideoPreviewPaneProps {
   videos: VideoFile[]
   previewVideo: VideoFile | null
@@ -172,6 +180,32 @@ export function VideoPreviewPane({
                 <span className="text-gray-600">路径</span>
                 <p className="truncate text-gray-300" title={previewVideo.path}>
                   {previewVideo.name}
+                </p>
+              </div>
+              <div>
+                <span className="text-gray-600">封装</span>
+                <p className="truncate text-gray-300" title={previewVideo.formatName}>
+                  {previewVideo.formatName ?? '—'}
+                </p>
+              </div>
+              <div>
+                <span className="text-gray-600">编码</span>
+                <p
+                  className="truncate text-gray-300"
+                  title={`${previewVideo.videoCodec ?? '—'} / ${previewVideo.audioCodec ?? '—'}`}
+                >
+                  {(previewVideo.videoCodec ?? '—') + ' / ' + (previewVideo.audioCodec ?? '—')}
+                </p>
+              </div>
+              <div>
+                <span className="text-gray-600">码率</span>
+                <p className="text-gray-300">{formatBitrate(previewVideo.bitRateBps)}</p>
+              </div>
+              <div>
+                <span className="text-gray-600">视频/音频码率</span>
+                <p className="text-gray-300">
+                  {formatBitrate(previewVideo.videoBitRateBps)} /{' '}
+                  {formatBitrate(previewVideo.audioBitRateBps)}
                 </p>
               </div>
             </div>

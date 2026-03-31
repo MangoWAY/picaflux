@@ -23,6 +23,12 @@ async function buildVideoEntries(paths: string[]): Promise<VideoFile[]> {
         durationSec: info?.durationSec,
         width: info?.width,
         height: info?.height,
+        formatName: info?.formatName,
+        videoCodec: info?.videoCodec,
+        audioCodec: info?.audioCodec,
+        bitRateBps: info?.bitRateBps,
+        videoBitRateBps: info?.videoBitRateBps,
+        audioBitRateBps: info?.audioBitRateBps,
         status: 'pending' as const,
         previewUrl: `file://${filePath}`,
       }

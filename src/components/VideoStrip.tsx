@@ -9,6 +9,12 @@ export interface VideoFile {
   durationSec?: number
   width?: number
   height?: number
+  formatName?: string
+  videoCodec?: string
+  audioCodec?: string
+  bitRateBps?: number
+  videoBitRateBps?: number
+  audioBitRateBps?: number
   status: 'pending' | 'processing' | 'done' | 'error'
   previewUrl?: string
 }
