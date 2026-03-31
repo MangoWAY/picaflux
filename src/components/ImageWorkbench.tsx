@@ -78,6 +78,8 @@ export function ImageWorkbench({
     watermarkTopPct: FIXED_WATERMARK_DEFAULTS.topPercent,
     watermarkWidthPct: FIXED_WATERMARK_DEFAULTS.widthPercent,
     watermarkHeightPct: FIXED_WATERMARK_DEFAULTS.heightPercent,
+    cropEnabled: false,
+    cropNorm: { x: 0, y: 0, w: 1, h: 1 },
   })
 
   const imagePathsKey = useMemo(() => images.map((i) => i.path).join('\n'), [images])
@@ -254,6 +256,16 @@ export function ImageWorkbench({
             ),
           }
         : undefined,
+      ...(options.cropEnabled
+        ? {
+            crop: {
+              x: options.cropNorm.x,
+              y: options.cropNorm.y,
+              width: options.cropNorm.w,
+              height: options.cropNorm.h,
+            },
+          }
+        : {}),
     }
 
     const parseGridDim = (s: string, fallback: number) => {
@@ -354,6 +366,9 @@ export function ImageWorkbench({
         onUpdateSliceLines={(xLines, yLines) =>
           setOptions((prev) => ({ ...prev, sliceXLines: xLines, sliceYLines: yLines }))
         }
+        cropEnabled={options.cropEnabled}
+        cropNorm={options.cropNorm}
+        onCropNormChange={(rect) => setOptions((prev) => ({ ...prev, cropNorm: rect }))}
       />
       <SettingsPanel
         options={options}

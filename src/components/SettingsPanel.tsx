@@ -47,6 +47,9 @@ export interface ProcessOptions {
   watermarkTopPct: string
   watermarkWidthPct: string
   watermarkHeightPct: string
+  /** 与中间预览一致的裁剪框（相对当前「视觉」宽高的 0–1 归一化，含旋转/镜像后） */
+  cropEnabled: boolean
+  cropNorm: { x: number; y: number; w: number; h: number }
 }
 
 const OUTPUT_FORMAT_VALUES: OutputFormatOption[] = ['original', 'png', 'jpeg', 'webp', 'avif']
@@ -219,6 +222,43 @@ export function SettingsPanel({
               垂直镜像
             </button>
           </div>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
+          <div className="flex items-center justify-between gap-3 px-3 py-3">
+            <div className="min-w-0">
+              <span className="text-sm font-medium text-gray-200">可视化裁剪</span>
+              <p className="mt-0.5 text-[10px] text-gray-500">
+                在预览中拖动画框；导出与网格切图会在旋转/镜像之后先裁剪
+              </p>
+            </div>
+            <PanelToggle
+              checked={options.cropEnabled}
+              onChange={(v) =>
+                onChange({
+                  ...options,
+                  cropEnabled: v,
+                  cropNorm: v
+                    ? options.cropNorm.w > 0 && options.cropNorm.h > 0
+                      ? options.cropNorm
+                      : { x: 0, y: 0, w: 1, h: 1 }
+                    : options.cropNorm,
+                })
+              }
+              ariaLabel="可视化裁剪"
+            />
+          </div>
+          {options.cropEnabled && (
+            <div className="border-t border-[#2d2d2d] px-3 py-2">
+              <button
+                type="button"
+                onClick={() => onChange({ ...options, cropNorm: { x: 0, y: 0, w: 1, h: 1 } })}
+                className="text-xs text-blue-400 hover:text-blue-300"
+              >
+                重置为全图
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 缩放：百分比 与 像素互斥 */}

@@ -56,6 +56,87 @@ interface ImagePreviewPaneProps {
   sliceXLines?: number[]
   sliceYLines?: number[]
   onUpdateSliceLines?: (xLines: number[], yLines: number[]) => void
+  cropEnabled?: boolean
+  cropNorm?: { x: number; y: number; w: number; h: number }
+  onCropNormChange?: (rect: { x: number; y: number; w: number; h: number }) => void
+}
+
+const MIN_CROP_FRAC = 0.02
+
+type CropDragHandle = 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se'
+
+interface CropDragState {
+  handle: CropDragHandle
+  startMx: number
+  startMy: number
+  start: { x: number; y: number; w: number; h: number }
+}
+
+function clampCropNorm(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  min = MIN_CROP_FRAC,
+): { x: number; y: number; w: number; h: number } {
+  let cx = x
+  let cy = y
+  let cw = Math.max(min, w)
+  let ch = Math.max(min, h)
+  if (cw > 1) cw = 1
+  if (ch > 1) ch = 1
+  cx = Math.max(0, Math.min(1 - cw, cx))
+  cy = Math.max(0, Math.min(1 - ch, cy))
+  cw = Math.max(min, Math.min(cw, 1 - cx))
+  ch = Math.max(min, Math.min(ch, 1 - cy))
+  return { x: cx, y: cy, w: cw, h: ch }
+}
+
+function computeCropFromDrag(
+  d: CropDragState,
+  nx: number,
+  ny: number,
+): { x: number; y: number; w: number; h: number } {
+  const r = d.start
+  const min = MIN_CROP_FRAC
+
+  switch (d.handle) {
+    case 'move':
+      return clampCropNorm(r.x + (nx - d.startMx), r.y + (ny - d.startMy), r.w, r.h, min)
+    case 'e':
+      return clampCropNorm(r.x, r.y, nx - r.x, r.h, min)
+    case 'w': {
+      const right = Math.min(r.x + r.w, 1)
+      const nxClamped = Math.min(nx, right - min)
+      return clampCropNorm(nxClamped, r.y, right - nxClamped, r.h, min)
+    }
+    case 's':
+      return clampCropNorm(r.x, r.y, r.w, ny - r.y, min)
+    case 'n': {
+      const bottom = Math.min(r.y + r.h, 1)
+      const nyClamped = Math.min(ny, bottom - min)
+      return clampCropNorm(r.x, nyClamped, r.w, bottom - nyClamped, min)
+    }
+    case 'se':
+      return clampCropNorm(r.x, r.y, nx - r.x, ny - r.y, min)
+    case 'sw': {
+      const right = Math.min(r.x + r.w, 1)
+      return clampCropNorm(nx, r.y, right - nx, ny - r.y, min)
+    }
+    case 'ne': {
+      const bottom = Math.min(r.y + r.h, 1)
+      return clampCropNorm(r.x, ny, nx - r.x, bottom - ny, min)
+    }
+    case 'nw': {
+      const right = Math.min(r.x + r.w, 1)
+      const bottom = Math.min(r.y + r.h, 1)
+      const nxClamped = Math.min(nx, right - min)
+      const nyClamped = Math.min(ny, bottom - min)
+      return clampCropNorm(nxClamped, nyClamped, right - nxClamped, bottom - nyClamped, min)
+    }
+    default:
+      return clampCropNorm(r.x, r.y, r.w, r.h, min)
+  }
 }
 
 function formatFormatLabel(format?: string): string {
@@ -87,6 +168,9 @@ export function ImagePreviewPane({
   sliceXLines,
   sliceYLines,
   onUpdateSliceLines,
+  cropEnabled = false,
+  cropNorm = { x: 0, y: 0, w: 1, h: 1 },
+  onCropNormChange,
 }: ImagePreviewPaneProps) {
   const collectPathsFromDataTransfer = useCallback((dt: DataTransfer): string[] => {
     const paths: string[] = []
@@ -310,6 +394,42 @@ export function ImagePreviewPane({
     axis: 'x' | 'y'
     index: number
   } | null>(null)
+  const [cropDrag, setCropDrag] = useState<CropDragState | null>(null)
+
+  const effectiveCrop = useMemo(
+    () => (cropEnabled ? cropNorm : { x: 0, y: 0, w: 1, h: 1 }),
+    [cropEnabled, cropNorm],
+  )
+
+  const clientToNorm = useCallback(
+    (clientX: number, clientY: number) => {
+      const vp = viewportRef.current
+      if (!vp || visualW <= 0 || visualH <= 0 || viewScale <= 0) return { nx: 0, ny: 0 }
+      const rect = vp.getBoundingClientRect()
+      const centerX = rect.left + rect.width / 2 + pan.x
+      const centerY = rect.top + rect.height / 2 + pan.y
+      const imgX = (clientX - centerX) / viewScale + visualW / 2
+      const imgY = (clientY - centerY) / viewScale + visualH / 2
+      return { nx: imgX / visualW, ny: imgY / visualH }
+    },
+    [pan.x, pan.y, viewScale, visualW, visualH],
+  )
+
+  const beginCropDrag = useCallback(
+    (e: React.MouseEvent, handle: CropDragHandle) => {
+      if (e.button !== 0 || !onCropNormChange) return
+      e.stopPropagation()
+      e.preventDefault()
+      const { nx, ny } = clientToNorm(e.clientX, e.clientY)
+      setCropDrag({
+        handle,
+        startMx: nx,
+        startMy: ny,
+        start: { ...cropNorm },
+      })
+    },
+    [clientToNorm, cropNorm, onCropNormChange],
+  )
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -329,6 +449,13 @@ export function ImagePreviewPane({
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
+      if (cropDrag && onCropNormChange) {
+        e.preventDefault()
+        const { nx, ny } = clientToNorm(e.clientX, e.clientY)
+        onCropNormChange(computeCropFromDrag(cropDrag, nx, ny))
+        return
+      }
+
       if (draggingSliceLine && onUpdateSliceLines && sliceXLines && sliceYLines) {
         e.preventDefault()
         const vp = viewportRef.current
@@ -345,15 +472,18 @@ export function ImagePreviewPane({
 
         if (visualW <= 0 || visualH <= 0) return
 
+        const cw = effectiveCrop.w > 1e-6 ? effectiveCrop.w : 1
+        const ch = effectiveCrop.h > 1e-6 ? effectiveCrop.h : 1
+
         if (draggingSliceLine.axis === 'x') {
           const newXLines = [...sliceXLines]
-          let pct = imgX / visualW
+          let pct = (imgX / visualW - effectiveCrop.x) / cw
           pct = Math.max(0.01, Math.min(0.99, pct))
           newXLines[draggingSliceLine.index] = pct
           onUpdateSliceLines(newXLines, sliceYLines)
         } else {
           const newYLines = [...sliceYLines]
-          let pct = imgY / visualH
+          let pct = (imgY / visualH - effectiveCrop.y) / ch
           pct = Math.max(0.01, Math.min(0.99, pct))
           newYLines[draggingSliceLine.index] = pct
           onUpdateSliceLines(sliceXLines, newYLines)
@@ -377,6 +507,10 @@ export function ImagePreviewPane({
       viewScale,
       visualW,
       visualH,
+      effectiveCrop,
+      cropDrag,
+      onCropNormChange,
+      clientToNorm,
     ],
   )
 
@@ -384,11 +518,14 @@ export function ImagePreviewPane({
     if (draggingSliceLine) {
       setDraggingSliceLine(null)
     }
+    if (cropDrag) {
+      setCropDrag(null)
+    }
     if (dragRef.current.active) {
       dragRef.current.active = false
       setIsDragging(false)
     }
-  }, [draggingSliceLine])
+  }, [draggingSliceLine, cropDrag])
 
   const [zoomPercentDraft, setZoomPercentDraft] = useState('')
   const [zoomPercentEditing, setZoomPercentEditing] = useState(false)
@@ -400,11 +537,12 @@ export function ImagePreviewPane({
   }, [viewPercentRounded, zoomPercentEditing])
 
   useEffect(() => {
-    if (!isDragging && !draggingSliceLine) return
+    if (!isDragging && !draggingSliceLine && !cropDrag) return
     const endDrag = () => {
       dragRef.current.active = false
       setIsDragging(false)
       setDraggingSliceLine(null)
+      setCropDrag(null)
     }
     window.addEventListener('mouseup', endDrag)
     window.addEventListener('blur', endDrag)
@@ -412,7 +550,7 @@ export function ImagePreviewPane({
       window.removeEventListener('mouseup', endDrag)
       window.removeEventListener('blur', endDrag)
     }
-  }, [isDragging, draggingSliceLine])
+  }, [isDragging, draggingSliceLine, cropDrag])
 
   const sliderPercentValue =
     viewPercentRounded > 0 ? Math.min(400, Math.max(25, viewPercentRounded)) : 25
@@ -563,7 +701,9 @@ export function ImagePreviewPane({
                           <div
                             key={`x-${i}`}
                             className="absolute top-0 bottom-0 w-4 -ml-2 cursor-col-resize pointer-events-auto group flex justify-center"
-                            style={{ left: `${xPct * 100}%` }}
+                            style={{
+                              left: `${(effectiveCrop.x + xPct * effectiveCrop.w) * 100}%`,
+                            }}
                             onMouseDown={(e) => {
                               e.stopPropagation()
                               setDraggingSliceLine({ axis: 'x', index: i })
@@ -576,7 +716,9 @@ export function ImagePreviewPane({
                           <div
                             key={`y-${i}`}
                             className="absolute left-0 right-0 h-4 -mt-2 cursor-row-resize pointer-events-auto group flex flex-col justify-center"
-                            style={{ top: `${yPct * 100}%` }}
+                            style={{
+                              top: `${(effectiveCrop.y + yPct * effectiveCrop.h) * 100}%`,
+                            }}
                             onMouseDown={(e) => {
                               e.stopPropagation()
                               setDraggingSliceLine({ axis: 'y', index: i })
@@ -587,6 +729,121 @@ export function ImagePreviewPane({
                         ))}
                       </div>
                     )}
+                    {cropEnabled && onCropNormChange ? (
+                      <div className="absolute inset-0 z-[25] pointer-events-none select-none">
+                        <div
+                          className="absolute left-0 right-0 top-0 bg-black/50 pointer-events-none"
+                          style={{ height: `${cropNorm.y * 100}%` }}
+                        />
+                        <div
+                          className="absolute left-0 right-0 bottom-0 bg-black/50 pointer-events-none"
+                          style={{ top: `${(cropNorm.y + cropNorm.h) * 100}%` }}
+                        />
+                        <div
+                          className="absolute left-0 bg-black/50 pointer-events-none"
+                          style={{
+                            top: `${cropNorm.y * 100}%`,
+                            width: `${cropNorm.x * 100}%`,
+                            height: `${cropNorm.h * 100}%`,
+                          }}
+                        />
+                        <div
+                          className="absolute right-0 bg-black/50 pointer-events-none"
+                          style={{
+                            top: `${cropNorm.y * 100}%`,
+                            left: `${(cropNorm.x + cropNorm.w) * 100}%`,
+                            height: `${cropNorm.h * 100}%`,
+                          }}
+                        />
+                        <div
+                          role="presentation"
+                          className="pointer-events-auto absolute cursor-move box-border border-2 border-amber-300 shadow-[0_0_0_1px_rgba(0,0,0,0.55)]"
+                          style={{
+                            left: `${cropNorm.x * 100}%`,
+                            top: `${cropNorm.y * 100}%`,
+                            width: `${cropNorm.w * 100}%`,
+                            height: `${cropNorm.h * 100}%`,
+                          }}
+                          onMouseDown={(e) => beginCropDrag(e, 'move')}
+                        />
+                        {(
+                          [
+                            [
+                              'nw',
+                              'cursor-nwse-resize',
+                              { left: `${cropNorm.x * 100}%`, top: `${cropNorm.y * 100}%` },
+                            ],
+                            [
+                              'n',
+                              'cursor-ns-resize',
+                              {
+                                left: `${(cropNorm.x + cropNorm.w / 2) * 100}%`,
+                                top: `${cropNorm.y * 100}%`,
+                              },
+                            ],
+                            [
+                              'ne',
+                              'cursor-nesw-resize',
+                              {
+                                left: `${(cropNorm.x + cropNorm.w) * 100}%`,
+                                top: `${cropNorm.y * 100}%`,
+                              },
+                            ],
+                            [
+                              'e',
+                              'cursor-ew-resize',
+                              {
+                                left: `${(cropNorm.x + cropNorm.w) * 100}%`,
+                                top: `${(cropNorm.y + cropNorm.h / 2) * 100}%`,
+                              },
+                            ],
+                            [
+                              'se',
+                              'cursor-nwse-resize',
+                              {
+                                left: `${(cropNorm.x + cropNorm.w) * 100}%`,
+                                top: `${(cropNorm.y + cropNorm.h) * 100}%`,
+                              },
+                            ],
+                            [
+                              's',
+                              'cursor-ns-resize',
+                              {
+                                left: `${(cropNorm.x + cropNorm.w / 2) * 100}%`,
+                                top: `${(cropNorm.y + cropNorm.h) * 100}%`,
+                              },
+                            ],
+                            [
+                              'sw',
+                              'cursor-nesw-resize',
+                              {
+                                left: `${cropNorm.x * 100}%`,
+                                top: `${(cropNorm.y + cropNorm.h) * 100}%`,
+                              },
+                            ],
+                            [
+                              'w',
+                              'cursor-ew-resize',
+                              {
+                                left: `${cropNorm.x * 100}%`,
+                                top: `${(cropNorm.y + cropNorm.h / 2) * 100}%`,
+                              },
+                            ],
+                          ] as const
+                        ).map(([h, cur, st]) => (
+                          <div
+                            key={h}
+                            role="presentation"
+                            className={clsx(
+                              'pointer-events-auto absolute z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-[2px] border-2 border-amber-200 bg-[#121212]',
+                              cur,
+                            )}
+                            style={st}
+                            onMouseDown={(e) => beginCropDrag(e, h)}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">

@@ -18,6 +18,13 @@ export type FixedWatermarkRegionPercent = {
   heightPercent: number
 }
 
+export type NormalizedCropRect = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface ProcessImageOptions {
   format?: 'original' | 'png' | 'jpeg' | 'webp' | 'avif'
   /** 顺时针 90° 的倍数，仅取 0–3 */
@@ -40,11 +47,72 @@ export interface ProcessImageOptions {
   /** 将矩形区域内像素 alpha 置 0（用于固定位置水印）；在缩放前、相对当前图像尺寸取百分比 */
   clearFixedWatermark?: boolean
   fixedWatermarkRegion?: FixedWatermarkRegionPercent
+  /**
+   * 归一化裁剪（0–1），相对 **rotate + flop + flip 之后** 的像素尺寸；
+   * 在缩放、切片与编码之前执行 extract
+   */
+  crop?: NormalizedCropRect
 }
 
 function clampPercent(n: number, fallback: number): number {
   if (!Number.isFinite(n)) return fallback
   return Math.min(100, Math.max(0, n))
+}
+
+const CROP_FULL_TOLERANCE = 1 / 512
+
+function sanitizeNormalizedCropRect(raw: unknown): NormalizedCropRect | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  const pick = (k: string) => {
+    const v = o[k]
+    return typeof v === 'number' && Number.isFinite(v) ? v : NaN
+  }
+  let x = pick('x')
+  let y = pick('y')
+  let w = pick('width')
+  let h = pick('height')
+  if ([x, y, w, h].some((n) => Number.isNaN(n))) return undefined
+  x = Math.min(1, Math.max(0, x))
+  y = Math.min(1, Math.max(0, y))
+  w = Math.min(1 - x, Math.max(0, w))
+  h = Math.min(1 - y, Math.max(0, h))
+  if (
+    w <= CROP_FULL_TOLERANCE ||
+    h <= CROP_FULL_TOLERANCE ||
+    x + w > 1 + 1e-6 ||
+    y + h > 1 + 1e-6
+  ) {
+    return undefined
+  }
+  if (
+    x <= CROP_FULL_TOLERANCE &&
+    y <= CROP_FULL_TOLERANCE &&
+    w >= 1 - CROP_FULL_TOLERANCE * 2 &&
+    h >= 1 - CROP_FULL_TOLERANCE * 2
+  ) {
+    return undefined
+  }
+  return { x, y, width: w, height: h }
+}
+
+async function applyNormalizedCrop(
+  pipeline: sharp.Sharp,
+  crop: NormalizedCropRect,
+): Promise<sharp.Sharp> {
+  const meta = await pipeline.metadata()
+  const W = meta.width ?? 0
+  const H = meta.height ?? 0
+  if (!W || !H) return pipeline
+  let left = Math.round(crop.x * W)
+  let top = Math.round(crop.y * H)
+  let width = Math.max(1, Math.round(crop.width * W))
+  let height = Math.max(1, Math.round(crop.height * H))
+  left = Math.max(0, Math.min(W - 1, left))
+  top = Math.max(0, Math.min(H - 1, top))
+  width = Math.max(1, Math.min(W - left, width))
+  height = Math.max(1, Math.min(H - top, height))
+  return pipeline.extract({ left, top, width, height })
 }
 
 function sanitizeFixedWatermarkRegion(raw: unknown): FixedWatermarkRegionPercent {
@@ -142,6 +210,7 @@ export function sanitizeProcessImageOptions(raw: unknown): ProcessImageOptions {
   const fixedWatermarkRegion = clearFixedWatermark
     ? sanitizeFixedWatermarkRegion(o.fixedWatermarkRegion)
     : undefined
+  const crop = sanitizeNormalizedCropRect(o.crop)
   let rotateQuarterTurns: number | undefined
   if (typeof o.rotateQuarterTurns === 'number' && Number.isFinite(o.rotateQuarterTurns)) {
     const n = Math.floor(o.rotateQuarterTurns) % 4
@@ -163,6 +232,7 @@ export function sanitizeProcessImageOptions(raw: unknown): ProcessImageOptions {
     backgroundRemovalBackendId,
     clearFixedWatermark,
     fixedWatermarkRegion,
+    crop,
   }
 }
 
@@ -446,6 +516,10 @@ export async function processImage(
       pipeline = pipeline.flip()
     }
 
+    if (options.crop) {
+      pipeline = await applyNormalizedCrop(pipeline, options.crop)
+    }
+
     // Resize：优先像素尺寸；否则按比例缩放
     const hasPixelResize =
       (typeof options.width === 'number' && options.width > 0) ||
@@ -543,6 +617,10 @@ export async function sliceImageGrid(
     if (rq !== 0) base = base.rotate(rq * 90)
     if (options.flipHorizontal === true) base = base.flop()
     if (options.flipVertical === true) base = base.flip()
+
+    if (options.crop) {
+      base = await applyNormalizedCrop(base, options.crop)
+    }
 
     const hasPixelResize =
       (typeof options.width === 'number' && options.width > 0) ||
