@@ -1,6 +1,8 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { UploadCloud, FileVideo } from 'lucide-react'
 import type { VideoFile } from './VideoStrip'
+import type { VideoProcessFormState } from '@/lib/videoFormPayload'
+import { VideoTimeline } from './VideoTimeline'
 
 const VIDEO_EXT = /\.(mp4|mov|mkv|webm|m4v|avi|mpeg|mpg)$/i
 
@@ -27,6 +29,9 @@ interface VideoPreviewPaneProps {
   selectedCount: number
   onAddVideos: () => void
   onDropPaths: (paths: string[]) => void
+  form: VideoProcessFormState
+  onFormChange: (next: VideoProcessFormState) => void
+  isProcessing: boolean
 }
 
 export function VideoPreviewPane({
@@ -35,6 +40,9 @@ export function VideoPreviewPane({
   selectedCount,
   onAddVideos,
   onDropPaths,
+  form,
+  onFormChange,
+  isProcessing,
 }: VideoPreviewPaneProps) {
   const [dragOver, setDragOver] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -74,6 +82,15 @@ export function VideoPreviewPane({
   }
 
   const src = previewVideo?.previewUrl
+  const showTimeline = Boolean(
+    previewVideo && (form.mode === 'trim' || form.mode === 'gif' || form.mode === 'extract_frame'),
+  )
+
+  const timelineMode = useMemo(() => {
+    if (form.mode === 'trim' || form.mode === 'gif' || form.mode === 'extract_frame')
+      return form.mode
+    return null
+  }, [form.mode])
 
   return (
     <div
@@ -120,6 +137,20 @@ export function VideoPreviewPane({
               controls
               className="max-h-[min(60vh,520px)] w-full rounded-lg bg-black object-contain"
             />
+            {showTimeline && timelineMode ? (
+              <VideoTimeline
+                mode={timelineMode}
+                videoEl={videoRef.current}
+                durationSec={previewVideo.durationSec}
+                startSecStr={form.startSecStr}
+                durationSecStr={form.durationSecStr}
+                timeSecStr={form.timeSecStr}
+                disabled={isProcessing}
+                onChange={(patch) => {
+                  onFormChange({ ...form, ...patch })
+                }}
+              />
+            ) : null}
             <div className="grid grid-cols-2 gap-2 text-xs text-gray-400 sm:grid-cols-4">
               <div>
                 <span className="text-gray-600">时长</span>

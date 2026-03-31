@@ -234,6 +234,9 @@ export function VideoWorkbench() {
         selectedCount={selectedCount}
         onAddVideos={handleAddVideos}
         onDropPaths={handleDropPaths}
+        form={form}
+        onFormChange={setForm}
+        isProcessing={isProcessing}
       />
       <VideoSettingsPanel
         state={form}
