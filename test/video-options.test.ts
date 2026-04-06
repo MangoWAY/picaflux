@@ -45,4 +45,10 @@ describe('sanitizeProcessVideoOptions', () => {
     const o = sanitizeProcessVideoOptions({ mode: 'trim', durationSec: 0 })
     expect(o.durationSec).toBe(60)
   })
+
+  it('coerces concat copy_streams to web_mp4', () => {
+    const o = sanitizeProcessVideoOptions({ mode: 'concat', transcodePreset: 'copy_streams' })
+    expect(o.mode).toBe('concat')
+    expect(o.transcodePreset).toBe('web_mp4')
+  })
 })

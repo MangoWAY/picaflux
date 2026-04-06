@@ -16,6 +16,8 @@ const base: VideoProcessFormState = {
   gifFpsStr: '10',
   gifMaxWidthStr: '480',
   webpQualityStr: '75',
+  videoRotation: '0',
+  videoFlip: 'none',
 }
 
 describe('buildVideoProcessPayload', () => {
@@ -23,6 +25,8 @@ describe('buildVideoProcessPayload', () => {
     expect(buildVideoProcessPayload({ ...base, mode: 'transcode', maxWidthStr: '0' })).toEqual({
       mode: 'transcode',
       transcodePreset: 'web_mp4',
+      videoRotationDeg: 0,
+      videoFlip: 'none',
     })
     expect(
       buildVideoProcessPayload({ ...base, mode: 'transcode', maxWidthStr: '720' }),
@@ -44,6 +48,35 @@ describe('buildVideoProcessPayload', () => {
       timeSec: 1.5,
       frameIntervalSec: 2,
       maxFrameCount: 5,
+    })
+  })
+
+  it('includes rotation and flip on transcode', () => {
+    const p = buildVideoProcessPayload({
+      ...base,
+      mode: 'transcode',
+      videoRotation: '90',
+      videoFlip: 'horizontal',
+    })
+    expect(p).toMatchObject({
+      videoRotationDeg: 90,
+      videoFlip: 'horizontal',
+    })
+  })
+
+  it('builds concat with preset and transform', () => {
+    const p = buildVideoProcessPayload({
+      ...base,
+      mode: 'concat',
+      transcodePreset: 'high_quality_mp4',
+      maxWidthStr: '960',
+      videoRotation: '180',
+    })
+    expect(p).toMatchObject({
+      mode: 'concat',
+      transcodePreset: 'high_quality_mp4',
+      maxWidth: 960,
+      videoRotationDeg: 180,
     })
   })
 

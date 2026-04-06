@@ -17,6 +17,7 @@ export interface VideoFileInfoPayload {
   formatName?: string
   videoCodec?: string
   audioCodec?: string
+  hasAudio?: boolean
   /** overall bitrate in bits per second */
   bitRateBps?: number
   /** video stream bitrate in bits per second */
@@ -70,6 +71,7 @@ export async function getVideoFileInfo(inputPath: string): Promise<VideoFileInfo
         resolve({
           durationSec: 0,
           size: st.size,
+          hasAudio: false,
         })
         return
       }
@@ -100,6 +102,7 @@ export async function getVideoFileInfo(inputPath: string): Promise<VideoFileInfo
         formatName: meta.format.format_long_name || meta.format.format_name,
         videoCodec: video?.codec_name,
         audioCodec: audio?.codec_name,
+        hasAudio: Boolean(audio),
         bitRateBps,
         videoBitRateBps,
         audioBitRateBps,
@@ -119,6 +122,57 @@ function applyScaleFilter(cmd: FfmpegCommand, maxW: number): void {
   cmd.videoFilters(`scale='min(${maxW},iw)':-2`)
 }
 
+function needsVideoTransform(o: SanitizedVideoOptions): boolean {
+  return o.videoRotationDeg !== 0 || o.videoFlip !== 'none'
+}
+
+function videoTransformFilterParts(o: SanitizedVideoOptions): string[] {
+  const parts: string[] = []
+  switch (o.videoRotationDeg) {
+    case 0:
+      break
+    case 90:
+      parts.push('transpose=1')
+      break
+    case 180:
+      parts.push('transpose=1')
+      parts.push('transpose=1')
+      break
+    case 270:
+      parts.push('transpose=2')
+      break
+    default:
+      break
+  }
+  if (o.videoFlip === 'horizontal') parts.push('hflip')
+  else if (o.videoFlip === 'vertical') parts.push('vflip')
+  else if (o.videoFlip === 'both') {
+    parts.push('hflip')
+    parts.push('vflip')
+  }
+  return parts
+}
+
+/** 旋转/翻转 + 可选最长边缩放（与图片工作台语义一致） */
+function joinTransformAndMaxWidthVF(o: SanitizedVideoOptions): string | null {
+  const t = videoTransformFilterParts(o)
+  const tf = t.length ? t.join(',') : null
+  const scale = o.maxWidth > 0 ? `scale='min(${o.maxWidth},iw)':-2` : null
+  if (tf && scale) return `${tf},${scale}`
+  if (tf) return tf
+  if (scale) return scale
+  return null
+}
+
+function dimensionsAfterRotation(
+  w: number,
+  h: number,
+  rot: SanitizedVideoOptions['videoRotationDeg'],
+): [number, number] {
+  if (rot === 90 || rot === 270) return [h, w]
+  return [w, h]
+}
+
 function buildTranscode(
   inputPath: string,
   outputPath: string,
@@ -135,13 +189,15 @@ function buildTranscode(
       .videoCodec('libx264')
       .audioCodec('aac')
       .addOptions(['-crf', '18', '-preset', 'slow', '-movflags', '+faststart', '-b:a', '192k'])
-    applyScaleFilter(cmd, o.maxWidth)
+    const vf = joinTransformAndMaxWidthVF(o)
+    if (vf) cmd.videoFilters(vf)
   } else {
     cmd
       .videoCodec('libx264')
       .audioCodec('aac')
       .addOptions(['-crf', '23', '-preset', 'fast', '-movflags', '+faststart', '-b:a', '128k'])
-    applyScaleFilter(cmd, o.maxWidth)
+    const vf = joinTransformAndMaxWidthVF(o)
+    if (vf) cmd.videoFilters(vf)
   }
 
   cmd.on('progress', (p) => {
@@ -167,7 +223,9 @@ function buildTrim(
     .output(outputPath)
     .outputOptions(['-map_metadata', '-1'])
 
-  applyScaleFilter(cmd, o.maxWidth)
+  const vf = joinTransformAndMaxWidthVF(o)
+  if (vf) cmd.videoFilters(vf)
+  else applyScaleFilter(cmd, o.maxWidth)
   cmd.on('progress', (p) => {
     if (typeof p.percent === 'number') sendProgress(sender, taskId, p.percent)
   })
@@ -177,9 +235,24 @@ function buildTrim(
 function buildStripAudio(
   inputPath: string,
   outputPath: string,
+  o: SanitizedVideoOptions,
   taskId: string,
   sender: WebContents,
 ) {
+  if (needsVideoTransform(o) || o.maxWidth > 0) {
+    const cmd = ffmpeg(inputPath)
+      .videoCodec('libx264')
+      .noAudio()
+      .addOptions(['-crf', '23', '-preset', 'fast', '-movflags', '+faststart'])
+      .output(outputPath)
+      .outputOptions(['-map_metadata', '-1'])
+    const vf = joinTransformAndMaxWidthVF(o)
+    if (vf) cmd.videoFilters(vf)
+    cmd.on('progress', (p) => {
+      if (typeof p.percent === 'number') sendProgress(sender, taskId, p.percent)
+    })
+    return cmd
+  }
   const cmd = ffmpeg(inputPath)
     .videoCodec('copy')
     .noAudio()
@@ -231,7 +304,9 @@ function createGifEncodeCommand(
 ): FfmpegCommand {
   const fps = o.gifFps
   const w = o.gifMaxWidth
-  const vf = `fps=${fps},scale=${w}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=single[p];[s1][p]paletteuse=dither=bayer`
+  const tp = videoTransformFilterParts(o).join(',')
+  const graph = `fps=${fps},scale=${w}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=single[p];[s1][p]paletteuse=dither=bayer`
+  const vf = tp ? `${tp},${graph}` : graph
   return ffmpeg(inputPath)
     .setStartTime(o.startSec)
     .setDuration(o.durationSec)
@@ -264,7 +339,9 @@ function buildWebpAnim(
   const fps = o.gifFps
   const w = o.gifMaxWidth
   const q = Math.round(o.webpQuality)
-  const vf = `fps=${fps},scale=${w}:-1:flags=lanczos`
+  const tp = videoTransformFilterParts(o).join(',')
+  const core = `fps=${fps},scale=${w}:-1:flags=lanczos`
+  const vf = tp ? `${tp},${core}` : core
   const cmd = ffmpeg(inputPath)
     .setStartTime(o.startSec)
     .setDuration(o.durationSec)
@@ -342,9 +419,11 @@ async function extractFramesSequence(
 
   const outputs: string[] = []
   let i = 0
+  const tfOnly = videoTransformFilterParts(o).join(',')
   for (const ts of times) {
     const out = path.join(outputDir, `${baseName}_frame_${String(++i).padStart(4, '0')}.${ext}`)
     const cmd = ffmpeg(inputPath).seekInput(ts).outputOptions(['-frames:v', '1']).output(out)
+    if (tfOnly) cmd.videoFilters(tfOnly)
     if (o.frameFormat === 'jpeg') {
       cmd.outputOptions(['-q:v', '2'])
     }
@@ -354,6 +433,136 @@ async function extractFramesSequence(
   }
   sendProgress(sender, taskId, 100)
   return outputs
+}
+
+async function buildConcatCommand(
+  inputPaths: string[],
+  outputPath: string,
+  o: SanitizedVideoOptions,
+  taskId: string,
+  sender: WebContents,
+): Promise<FfmpegCommand> {
+  const infos = await Promise.all(inputPaths.map((p) => getVideoFileInfo(p)))
+  if (infos.some((x) => !x)) {
+    throw new Error('无法读取某个视频的元数据')
+  }
+  const probes = infos as VideoFileInfoPayload[]
+  if (probes.some((p) => !p.hasAudio)) {
+    throw new Error('合并需每个片段均包含音轨；无声片段请先单独处理或重新封装')
+  }
+
+  const fallbackW = 1280
+  const fallbackH = 720
+  const eff = probes.map((p) => {
+    const w = p.width && p.width > 0 ? p.width : fallbackW
+    const h = p.height && p.height > 0 ? p.height : fallbackH
+    return dimensionsAfterRotation(w, h, o.videoRotationDeg)
+  })
+  const maxEffW = Math.max(...eff.map(([ew]) => ew))
+  const targetW = o.maxWidth > 0 ? Math.min(o.maxWidth, maxEffW) : maxEffW
+  const tw = Math.max(16, Math.round(targetW))
+
+  const scaledHeights = eff.map(([ew, eh]) => Math.max(1, Math.round((eh * tw) / ew)))
+  const maxH = Math.max(...scaledHeights)
+
+  const tf = videoTransformFilterParts(o)
+  const tfPrefix = tf.length ? `${tf.join(',')},` : ''
+
+  const filterLines: string[] = []
+  for (let i = 0; i < inputPaths.length; i++) {
+    filterLines.push(
+      `[${i}:v]${tfPrefix}scale=${tw}:-2,pad=${tw}:${maxH}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,setpts=PTS-STARTPTS[v${i}]`,
+    )
+    filterLines.push(
+      `[${i}:a]aformat=sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS[a${i}]`,
+    )
+  }
+  const concatIn = inputPaths.map((_, i) => `[v${i}][a${i}]`).join('')
+  filterLines.push(`${concatIn}concat=n=${inputPaths.length}:v=1:a=1[outv][outa]`)
+  const fc = filterLines.join(';')
+
+  const encOpts =
+    o.transcodePreset === 'high_quality_mp4'
+      ? ['-crf', '18', '-preset', 'slow', '-b:a', '192k']
+      : ['-crf', '23', '-preset', 'fast', '-b:a', '128k']
+
+  const cmd = ffmpeg()
+  for (const p of inputPaths) {
+    cmd.input(p)
+  }
+  cmd
+    .complexFilter(fc)
+    .outputOptions([
+      '-map',
+      '[outv]',
+      '-map',
+      '[outa]',
+      '-c:v',
+      'libx264',
+      '-c:a',
+      'aac',
+      ...encOpts,
+      '-movflags',
+      '+faststart',
+      '-map_metadata',
+      '-1',
+    ])
+    .output(outputPath)
+
+  cmd.on('progress', (p) => {
+    if (typeof p.percent === 'number') sendProgress(sender, taskId, p.percent)
+  })
+  return cmd
+}
+
+export async function processVideoConcat(
+  taskId: string,
+  inputPaths: unknown,
+  outputDir: string,
+  rawOptions: unknown,
+  sender: WebContents,
+): Promise<ProcessVideoResult> {
+  if (typeof taskId !== 'string' || !taskId.trim()) {
+    return { success: false, error: 'Invalid task id' }
+  }
+  if (typeof outputDir !== 'string' || !outputDir.trim()) {
+    return { success: false, error: 'Invalid output directory' }
+  }
+  if (!Array.isArray(inputPaths) || inputPaths.length < 2) {
+    return { success: false, error: '合并至少需要 2 个视频' }
+  }
+  const paths: string[] = []
+  for (const p of inputPaths) {
+    if (typeof p !== 'string' || !p.trim()) {
+      return { success: false, error: '合并路径无效' }
+    }
+    paths.push(p)
+  }
+
+  const o = sanitizeProcessVideoOptions(rawOptions)
+  if (o.mode !== 'concat') {
+    return { success: false, error: '合并任务参数 mode 无效' }
+  }
+  configureFfmpegStatic(ffmpeg)
+
+  try {
+    await fs.mkdir(outputDir, { recursive: true })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Cannot create output directory'
+    return { success: false, error: msg }
+  }
+
+  const firstBase = parsedBase(paths[0]).name
+  const outputPath = path.join(outputDir, `${firstBase}_merged_${paths.length}_${Date.now()}.mp4`)
+
+  try {
+    const cmd = await buildConcatCommand(paths, outputPath, o, taskId, sender)
+    await runCommand(cmd, taskId, sender)
+    return { success: true, outputPath }
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Video concat failed'
+    return { success: false, error: message }
+  }
 }
 
 export async function processVideo(
@@ -372,6 +581,16 @@ export async function processVideo(
 
   const o = sanitizeProcessVideoOptions(rawOptions)
   configureFfmpegStatic(ffmpeg)
+
+  if (o.mode === 'concat') {
+    return { success: false, error: '内部错误：合并应使用专用接口' }
+  }
+  if (o.mode === 'transcode' && o.transcodePreset === 'copy_streams' && needsVideoTransform(o)) {
+    return {
+      success: false,
+      error: '流拷贝无法与旋转/翻转同时进行，请改用转码预设或关闭画面变换',
+    }
+  }
 
   try {
     await fs.mkdir(outputDir, { recursive: true })
@@ -436,7 +655,7 @@ export async function processVideo(
       }
       case 'strip_audio': {
         outputPath = path.join(outputDir, `${base}_noaudio.mp4`)
-        cmd = buildStripAudio(inputPath, outputPath, taskId, sender)
+        cmd = buildStripAudio(inputPath, outputPath, o, taskId, sender)
         break
       }
       case 'audio_extract': {
@@ -461,6 +680,10 @@ export async function processVideo(
           .seekInput(o.timeSec)
           .outputOptions(['-frames:v', '1'])
           .output(outputPath)
+        {
+          const tfOnly = videoTransformFilterParts(o).join(',')
+          if (tfOnly) cmd.videoFilters(tfOnly)
+        }
         if (o.frameFormat === 'jpeg') {
           cmd.outputOptions(['-q:v', '2'])
         }

@@ -11,6 +11,7 @@ const MODE_OPTIONS: { id: VideoWorkbenchMode; label: string }[] = [
   { id: 'strip_audio', label: '去除音轨' },
   { id: 'gif', label: '导出 GIF' },
   { id: 'webp_anim', label: '导出 WebP（动图）' },
+  { id: 'concat', label: '合并片段' },
 ]
 
 interface VideoSettingsPanelProps {
@@ -43,7 +44,10 @@ export function VideoSettingsPanel({
     onChange({ ...state, [key]: value })
   }
 
-  const canStart = selectedForProcessCount > 0 && Boolean(state.outputDir.trim())
+  const canStart =
+    selectedForProcessCount > 0 &&
+    Boolean(state.outputDir.trim()) &&
+    (state.mode !== 'concat' || selectedForProcessCount >= 2)
 
   return (
     <div className="flex h-full w-[320px] shrink-0 flex-col border-l border-[#2d2d2d] bg-[#1a1a1a]">
@@ -92,6 +96,46 @@ export function VideoSettingsPanel({
             <div>
               <label className="mb-2 block text-xs font-medium text-gray-400">
                 最长边上限（像素，0=不缩放）
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={state.maxWidthStr}
+                onChange={(e) => update('maxWidthStr', e.target.value)}
+                disabled={isProcessing}
+                className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
+              />
+            </div>
+          </>
+        ) : null}
+
+        {state.mode === 'concat' ? (
+          <>
+            <p className="text-xs leading-relaxed text-gray-500">
+              按左侧列表<strong>从上到下</strong>的顺序拼接<strong>已勾选</strong>的片段（至少 2
+              个）。各段需<strong>均含音轨</strong>。
+            </p>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-gray-400">预设</label>
+              <select
+                value={state.transcodePreset}
+                onChange={(e) =>
+                  update(
+                    'transcodePreset',
+                    e.target.value as VideoProcessFormState['transcodePreset'],
+                  )
+                }
+                disabled={isProcessing}
+                className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
+              >
+                <option value="web_mp4">Web MP4（H.264 + AAC）</option>
+                <option value="high_quality_mp4">高质量 MP4</option>
+                <option value="copy_streams">流拷贝（合并时会自动改为 Web MP4 重编码）</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-gray-400">
+                最长边上限（像素，0=按素材最大宽度统一画布）
               </label>
               <input
                 type="number"
@@ -244,6 +288,56 @@ export function VideoSettingsPanel({
             />
           </div>
         )}
+
+        {state.mode === 'transcode' ||
+        state.mode === 'trim' ||
+        state.mode === 'strip_audio' ||
+        state.mode === 'gif' ||
+        state.mode === 'webp_anim' ||
+        state.mode === 'extract_frame' ||
+        state.mode === 'concat' ? (
+          <>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-gray-400">旋转（顺时针）</label>
+              <select
+                value={state.videoRotation}
+                onChange={(e) =>
+                  update('videoRotation', e.target.value as VideoProcessFormState['videoRotation'])
+                }
+                disabled={isProcessing}
+                className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
+              >
+                <option value="0">不旋转</option>
+                <option value="90">90°</option>
+                <option value="180">180°</option>
+                <option value="270">270°</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-gray-400">翻转</label>
+              <select
+                value={state.videoFlip}
+                onChange={(e) =>
+                  update('videoFlip', e.target.value as VideoProcessFormState['videoFlip'])
+                }
+                disabled={isProcessing}
+                className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
+              >
+                <option value="none">无</option>
+                <option value="horizontal">水平</option>
+                <option value="vertical">垂直</option>
+                <option value="both">水平 + 垂直</option>
+              </select>
+            </div>
+            {state.mode === 'transcode' &&
+            state.transcodePreset === 'copy_streams' &&
+            (state.videoRotation !== '0' || state.videoFlip !== 'none') ? (
+              <p className="text-xs text-amber-500/90">
+                流拷贝不能与旋转/翻转同时进行，请改用转码预设或关闭变换。
+              </p>
+            ) : null}
+          </>
+        ) : null}
 
         {state.mode === 'audio_extract' ? (
           <div>

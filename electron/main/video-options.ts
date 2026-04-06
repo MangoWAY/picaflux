@@ -7,6 +7,10 @@ export type ProcessVideoMode =
   | 'gif'
   /** 动图 WebP：ffmpeg `libwebp`（需当前使用的 ffmpeg 已编译启用 libwebp） */
   | 'webp_anim'
+  /** 按路径顺序合并多段（统一分辨率画布，需各段均有音轨） */
+  | 'concat'
+
+export type VideoFlipOption = 'none' | 'horizontal' | 'vertical' | 'both'
 
 export type TranscodePreset = 'web_mp4' | 'copy_streams' | 'high_quality_mp4'
 
@@ -37,6 +41,9 @@ export interface ProcessVideoOptions {
   gifMaxWidth?: number
   /** webp_anim：质量 1–100，越高越清晰 */
   webpQuality?: number
+  /** 顺时针旋转角度，仅允许 0 / 90 / 180 / 270 */
+  videoRotationDeg?: number
+  videoFlip?: VideoFlipOption
 }
 
 export interface SanitizedVideoOptions {
@@ -53,6 +60,8 @@ export interface SanitizedVideoOptions {
   gifFps: number
   gifMaxWidth: number
   webpQuality: number
+  videoRotationDeg: 0 | 90 | 180 | 270
+  videoFlip: VideoFlipOption
 }
 
 const MODES: ReadonlySet<ProcessVideoMode> = new Set([
@@ -63,7 +72,10 @@ const MODES: ReadonlySet<ProcessVideoMode> = new Set([
   'strip_audio',
   'gif',
   'webp_anim',
+  'concat',
 ])
+
+const FLIPS: ReadonlySet<VideoFlipOption> = new Set(['none', 'horizontal', 'vertical', 'both'])
 
 const PSETS: ReadonlySet<TranscodePreset> = new Set(['web_mp4', 'copy_streams', 'high_quality_mp4'])
 const AFORMATS: ReadonlySet<AudioExtractFormat> = new Set(['aac', 'mp3', 'wav'])
@@ -107,6 +119,17 @@ export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions
   const gifMaxWidth = Math.round(num(d.gifMaxWidth, 480, 160, 1280))
   const webpQuality = Math.round(num(d.webpQuality, 75, 1, 100))
 
+  let videoRotationDeg = 0 as 0 | 90 | 180 | 270
+  const rotRaw = typeof d.videoRotationDeg === 'number' ? d.videoRotationDeg : 0
+  if (rotRaw === 90 || rotRaw === 180 || rotRaw === 270) {
+    videoRotationDeg = rotRaw
+  }
+
+  const videoFlip: VideoFlipOption =
+    typeof d.videoFlip === 'string' && FLIPS.has(d.videoFlip as VideoFlipOption)
+      ? (d.videoFlip as VideoFlipOption)
+      : 'none'
+
   if (mode === 'trim' || mode === 'gif' || mode === 'webp_anim') {
     if (durationSec <= 0) durationSec = 60
   }
@@ -118,6 +141,10 @@ export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions
     if (frameIntervalSec > 0) {
       maxFrameCount = Math.round(num(d.maxFrameCount, 60, 1, 100))
     }
+  }
+
+  if (mode === 'concat' && transcodePreset === 'copy_streams') {
+    transcodePreset = 'web_mp4'
   }
 
   return {
@@ -134,5 +161,7 @@ export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions
     gifFps,
     gifMaxWidth,
     webpQuality,
+    videoRotationDeg,
+    videoFlip,
   }
 }

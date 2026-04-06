@@ -21,7 +21,12 @@ import {
   sanitizeSliceImageGridOptions,
   sliceImageGrid,
 } from './image-processor'
-import { processVideo, getVideoFileInfo, cancelVideoTask } from './video-processor'
+import {
+  processVideo,
+  processVideoConcat,
+  getVideoFileInfo,
+  cancelVideoTask,
+} from './video-processor'
 import { getModel3dFileInfo, save3dThumbnailPng, processGlbConvert } from './gltf-3d-processor'
 import {
   registerBackgroundRemovalBackends,
@@ -254,6 +259,16 @@ ipcMain.handle(
       return { success: false, error: 'Invalid arguments' }
     }
     return await processVideo(taskId, inputPath, outputDir, options, event.sender)
+  },
+)
+
+ipcMain.handle(
+  'video:processConcat',
+  async (event, taskId: string, inputPaths: unknown, outputDir: string, options: unknown) => {
+    if (typeof taskId !== 'string' || typeof outputDir !== 'string') {
+      return { success: false, error: 'Invalid arguments' }
+    }
+    return await processVideoConcat(taskId, inputPaths, outputDir, options, event.sender)
   },
 )
 

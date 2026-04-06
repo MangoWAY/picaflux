@@ -53,6 +53,17 @@ interface Window {
       outputPaths?: string[]
       error?: string
     }>
+    processVideoConcat: (
+      taskId: string,
+      inputPaths: string[],
+      outputDir: string,
+      options: unknown,
+    ) => Promise<{
+      success: boolean
+      outputPath?: string
+      outputPaths?: string[]
+      error?: string
+    }>
     getVideoFileInfo: (filePath: string) => Promise<{
       durationSec: number
       width?: number

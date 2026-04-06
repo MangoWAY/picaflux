@@ -39,6 +39,13 @@ contextBridge.exposeInMainWorld('picafluxAPI', {
       outputPaths?: string[]
       error?: string
     }>,
+  processVideoConcat: (taskId: string, inputPaths: string[], outputDir: string, options: unknown) =>
+    ipcRenderer.invoke('video:processConcat', taskId, inputPaths, outputDir, options) as Promise<{
+      success: boolean
+      outputPath?: string
+      outputPaths?: string[]
+      error?: string
+    }>,
   getVideoFileInfo: (filePath: string) =>
     ipcRenderer.invoke('video:getFileInfo', filePath) as Promise<{
       durationSec: number

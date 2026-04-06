@@ -6,6 +6,11 @@ export type VideoWorkbenchMode =
   | 'strip_audio'
   | 'gif'
   | 'webp_anim'
+  | 'concat'
+
+export type VideoRotationUi = '0' | '90' | '180' | '270'
+
+export type VideoFlipUi = 'none' | 'horizontal' | 'vertical' | 'both'
 
 export interface VideoProcessFormState {
   mode: VideoWorkbenchMode
@@ -23,6 +28,9 @@ export interface VideoProcessFormState {
   gifMaxWidthStr: string
   /** 动图 WebP 质量 1–100 */
   webpQualityStr: string
+  /** 顺时针旋转 */
+  videoRotation: VideoRotationUi
+  videoFlip: VideoFlipUi
 }
 
 function parsePositiveFloat(s: string, fallback: number): number {
@@ -37,6 +45,17 @@ function parsePositiveInt(s: string, fallback: number): number {
   return n
 }
 
+function videoTransformPayload(state: VideoProcessFormState): {
+  videoRotationDeg: number
+  videoFlip: VideoFlipUi
+} {
+  const deg = parseInt(state.videoRotation, 10)
+  return {
+    videoRotationDeg: deg === 90 || deg === 180 || deg === 270 ? deg : 0,
+    videoFlip: state.videoFlip,
+  }
+}
+
 export function buildVideoProcessPayload(state: VideoProcessFormState): Record<string, unknown> {
   const maxWidth = parsePositiveInt(state.maxWidthStr, 0)
   const startSec = parsePositiveFloat(state.startSecStr, 0)
@@ -47,6 +66,7 @@ export function buildVideoProcessPayload(state: VideoProcessFormState): Record<s
   const gifFps = parsePositiveFloat(state.gifFpsStr, 10)
   const gifMaxWidth = parsePositiveInt(state.gifMaxWidthStr, 480)
   const webpQuality = parsePositiveInt(state.webpQualityStr, 75)
+  const tx = videoTransformPayload(state)
 
   const base: Record<string, unknown> = { mode: state.mode }
 
@@ -56,6 +76,7 @@ export function buildVideoProcessPayload(state: VideoProcessFormState): Record<s
         ...base,
         transcodePreset: state.transcodePreset,
         ...(maxWidth > 0 ? { maxWidth } : {}),
+        ...tx,
       }
     case 'trim':
       return {
@@ -63,6 +84,7 @@ export function buildVideoProcessPayload(state: VideoProcessFormState): Record<s
         startSec,
         durationSec: durationSec > 0 ? durationSec : 60,
         ...(maxWidth > 0 ? { maxWidth } : {}),
+        ...tx,
       }
     case 'extract_frame':
       return {
@@ -72,11 +94,12 @@ export function buildVideoProcessPayload(state: VideoProcessFormState): Record<s
         ...(frameIntervalSec > 0
           ? { frameIntervalSec, maxFrameCount: maxFrameCount > 0 ? maxFrameCount : 60 }
           : {}),
+        ...tx,
       }
     case 'audio_extract':
       return { ...base, audioFormat: state.audioFormat }
     case 'strip_audio':
-      return base
+      return { ...base, ...tx }
     case 'gif':
       return {
         ...base,
@@ -84,6 +107,7 @@ export function buildVideoProcessPayload(state: VideoProcessFormState): Record<s
         durationSec: durationSec > 0 ? durationSec : 4,
         gifFps,
         gifMaxWidth: gifMaxWidth > 0 ? gifMaxWidth : 480,
+        ...tx,
       }
     case 'webp_anim':
       return {
@@ -93,6 +117,14 @@ export function buildVideoProcessPayload(state: VideoProcessFormState): Record<s
         gifFps,
         gifMaxWidth: gifMaxWidth > 0 ? gifMaxWidth : 480,
         webpQuality: webpQuality > 0 ? webpQuality : 75,
+        ...tx,
+      }
+    case 'concat':
+      return {
+        ...base,
+        transcodePreset: state.transcodePreset,
+        ...(maxWidth > 0 ? { maxWidth } : {}),
+        ...tx,
       }
     default:
       return base

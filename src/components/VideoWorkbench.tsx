@@ -52,6 +52,8 @@ const defaultForm: VideoProcessFormState = {
   gifFpsStr: '10',
   gifMaxWidthStr: '480',
   webpQualityStr: '75',
+  videoRotation: '0',
+  videoFlip: 'none',
 }
 
 export function VideoWorkbench() {
@@ -189,6 +191,39 @@ export function VideoWorkbench() {
     )
 
     const payloadBase = buildVideoProcessPayload(form)
+
+    if (form.mode === 'concat') {
+      if (batch.length < 2) {
+        setVideos((prev) => prev.map((v) => ({ ...v, status: 'pending' as const })))
+        setIsProcessing(false)
+        return
+      }
+      const orderedPaths = videos.filter((v) => checkedPaths.has(v.path)).map((v) => v.path)
+      const taskId = newTaskId()
+      activeTaskIdRef.current = taskId
+      setProgressPercent(0)
+      try {
+        const result = await window.picafluxAPI.processVideoConcat(
+          taskId,
+          orderedPaths,
+          form.outputDir,
+          payloadBase,
+        )
+        setVideos((prev) =>
+          prev.map((p) =>
+            checkedPaths.has(p.path) ? { ...p, status: result.success ? 'done' : 'error' } : p,
+          ),
+        )
+      } catch {
+        setVideos((prev) =>
+          prev.map((p) => (checkedPaths.has(p.path) ? { ...p, status: 'error' as const } : p)),
+        )
+      }
+      setProgressPercent(null)
+      activeTaskIdRef.current = null
+      setIsProcessing(false)
+      return
+    }
 
     for (const v of batch) {
       const taskId = newTaskId()
