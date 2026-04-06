@@ -7,6 +7,7 @@ export type VideoWorkbenchMode =
   | 'gif'
   | 'webp_anim'
   | 'concat'
+  | 'speed'
 
 export type VideoRotationUi = '0' | '90' | '180' | '270'
 
@@ -31,6 +32,8 @@ export interface VideoProcessFormState {
   /** 顺时针旋转 */
   videoRotation: VideoRotationUi
   videoFlip: VideoFlipUi
+  /** 变速倍率（>1 快放，<1 慢放），主进程会限制在 0.25–4 */
+  playbackSpeedStr: string
 }
 
 function parsePositiveFloat(s: string, fallback: number): number {
@@ -42,6 +45,12 @@ function parsePositiveFloat(s: string, fallback: number): number {
 function parsePositiveInt(s: string, fallback: number): number {
   const n = parseInt(s, 10)
   if (!Number.isFinite(n) || n < 0) return fallback
+  return n
+}
+
+function parsePlaybackSpeed(s: string, fallback: number): number {
+  const n = parseFloat(String(s).replace(',', '.'))
+  if (!Number.isFinite(n) || n <= 0) return fallback
   return n
 }
 
@@ -66,6 +75,7 @@ export function buildVideoProcessPayload(state: VideoProcessFormState): Record<s
   const gifFps = parsePositiveFloat(state.gifFpsStr, 10)
   const gifMaxWidth = parsePositiveInt(state.gifMaxWidthStr, 480)
   const webpQuality = parsePositiveInt(state.webpQualityStr, 75)
+  const playbackSpeed = parsePlaybackSpeed(state.playbackSpeedStr, 1)
   const tx = videoTransformPayload(state)
 
   const base: Record<string, unknown> = { mode: state.mode }
@@ -123,6 +133,14 @@ export function buildVideoProcessPayload(state: VideoProcessFormState): Record<s
       return {
         ...base,
         transcodePreset: state.transcodePreset,
+        ...(maxWidth > 0 ? { maxWidth } : {}),
+        ...tx,
+      }
+    case 'speed':
+      return {
+        ...base,
+        transcodePreset: state.transcodePreset,
+        playbackSpeed,
         ...(maxWidth > 0 ? { maxWidth } : {}),
         ...tx,
       }

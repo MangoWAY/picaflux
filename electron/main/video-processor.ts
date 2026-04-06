@@ -207,6 +207,85 @@ function buildTranscode(
   return cmd
 }
 
+/** `atempo` 单次仅支持 0.5–2，串联实现 0.25–4 倍速 */
+function buildAtempoChain(speed: number): string {
+  const parts: string[] = []
+  let remaining = speed
+  let safety = 0
+  while (remaining > 2 + 1e-9 && safety++ < 32) {
+    parts.push('atempo=2')
+    remaining /= 2
+  }
+  while (remaining < 0.5 - 1e-9 && safety++ < 64) {
+    parts.push('atempo=0.5')
+    remaining *= 2
+  }
+  const clamped = Math.min(2, Math.max(0.5, remaining))
+  const r = Math.round(clamped * 10000) / 10000
+  parts.push(`atempo=${r}`)
+  return parts.join(',')
+}
+
+function buildSpeedChange(
+  inputPath: string,
+  outputPath: string,
+  o: SanitizedVideoOptions,
+  hasAudio: boolean,
+  taskId: string,
+  sender: WebContents,
+): FfmpegCommand {
+  const speed = o.playbackSpeed
+  const speedExpr = String(speed)
+  const beforePts = joinTransformAndMaxWidthVF(o)
+  const vChain = beforePts ? `${beforePts},setpts=PTS/${speedExpr}` : `setpts=PTS/${speedExpr}`
+
+  const hq = o.transcodePreset === 'high_quality_mp4'
+  const vEnc = hq
+    ? (['-crf', '18', '-preset', 'slow', '-movflags', '+faststart'] as const)
+    : (['-crf', '23', '-preset', 'fast', '-movflags', '+faststart'] as const)
+  const ba = hq ? '192k' : '128k'
+
+  if (!hasAudio) {
+    const cmd = ffmpeg(inputPath)
+      .outputOptions(['-map_metadata', '-1'])
+      .videoFilters(vChain)
+      .videoCodec('libx264')
+      .noAudio()
+      .addOptions([...vEnc])
+      .output(outputPath)
+    cmd.on('progress', (p) => {
+      if (typeof p.percent === 'number') sendProgress(sender, taskId, p.percent)
+    })
+    return cmd
+  }
+
+  const atempo = buildAtempoChain(speed)
+  const fc = `[0:v]${vChain}[ov];[0:a]${atempo}[oa]`
+  const cmd = ffmpeg(inputPath)
+    .complexFilter(fc)
+    .outputOptions([
+      '-map',
+      '[ov]',
+      '-map',
+      '[oa]',
+      '-map_metadata',
+      '-1',
+      '-c:v',
+      'libx264',
+      '-c:a',
+      'aac',
+      ...vEnc,
+      '-b:a',
+      ba,
+    ])
+    .output(outputPath)
+
+  cmd.on('progress', (p) => {
+    if (typeof p.percent === 'number') sendProgress(sender, taskId, p.percent)
+  })
+  return cmd
+}
+
 function buildTrim(
   inputPath: string,
   outputPath: string,
@@ -607,7 +686,8 @@ export async function processVideo(
       o.mode === 'trim' ||
       o.mode === 'gif' ||
       o.mode === 'webp_anim' ||
-      o.mode === 'extract_frame'
+      o.mode === 'extract_frame' ||
+      o.mode === 'speed'
     ) {
       info = await getVideoFileInfo(inputPath)
       if (info && (o.mode === 'trim' || o.mode === 'gif' || o.mode === 'webp_anim')) {
@@ -671,6 +751,12 @@ export async function processVideo(
       case 'webp_anim': {
         outputPath = path.join(outputDir, `${base}_clip.webp`)
         cmd = buildWebpAnim(inputPath, outputPath, o, taskId, sender)
+        break
+      }
+      case 'speed': {
+        const spdLabel = String(o.playbackSpeed).replace(/\./g, '_')
+        outputPath = path.join(outputDir, `${base}_speed_x${spdLabel}.mp4`)
+        cmd = buildSpeedChange(inputPath, outputPath, o, Boolean(info?.hasAudio), taskId, sender)
         break
       }
       case 'extract_frame': {

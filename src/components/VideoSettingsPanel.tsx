@@ -6,6 +6,7 @@ import type { VideoProcessFormState, VideoWorkbenchMode } from '@/lib/videoFormP
 const MODE_OPTIONS: { id: VideoWorkbenchMode; label: string }[] = [
   { id: 'transcode', label: '转码 / 压缩' },
   { id: 'trim', label: '裁剪片段' },
+  { id: 'speed', label: '变速' },
   { id: 'extract_frame', label: '截帧' },
   { id: 'audio_extract', label: '抽取音频' },
   { id: 'strip_audio', label: '去除音轨' },
@@ -92,6 +93,59 @@ export function VideoSettingsPanel({
                 <option value="high_quality_mp4">高质量 MP4</option>
                 <option value="copy_streams">流拷贝（重封装）</option>
               </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-gray-400">
+                最长边上限（像素，0=不缩放）
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={state.maxWidthStr}
+                onChange={(e) => update('maxWidthStr', e.target.value)}
+                disabled={isProcessing}
+                className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
+              />
+            </div>
+          </>
+        ) : null}
+
+        {state.mode === 'speed' ? (
+          <>
+            <p className="text-xs leading-relaxed text-gray-500">
+              对<strong>整段</strong>视频改变播放速度（需重编码）。倍速 &gt; 1 快放，&lt; 1
+              慢放；有效范围约 0.25–4。无声素材仅变速画面。
+            </p>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-gray-400">预设</label>
+              <select
+                value={state.transcodePreset}
+                onChange={(e) =>
+                  update(
+                    'transcodePreset',
+                    e.target.value as VideoProcessFormState['transcodePreset'],
+                  )
+                }
+                disabled={isProcessing}
+                className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
+              >
+                <option value="web_mp4">Web MP4（H.264 + AAC）</option>
+                <option value="high_quality_mp4">高质量 MP4</option>
+                <option value="copy_streams">流拷贝（变速时会自动改为 Web MP4 重编码）</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-gray-400">
+                播放倍速（如 2=两倍速，0.5=半速）
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={state.playbackSpeedStr}
+                onChange={(e) => update('playbackSpeedStr', e.target.value)}
+                disabled={isProcessing}
+                className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
+              />
             </div>
             <div>
               <label className="mb-2 block text-xs font-medium text-gray-400">
@@ -291,6 +345,7 @@ export function VideoSettingsPanel({
 
         {state.mode === 'transcode' ||
         state.mode === 'trim' ||
+        state.mode === 'speed' ||
         state.mode === 'strip_audio' ||
         state.mode === 'gif' ||
         state.mode === 'webp_anim' ||

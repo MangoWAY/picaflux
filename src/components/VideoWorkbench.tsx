@@ -54,6 +54,7 @@ const defaultForm: VideoProcessFormState = {
   webpQualityStr: '75',
   videoRotation: '0',
   videoFlip: 'none',
+  playbackSpeedStr: '1.5',
 }
 
 export function VideoWorkbench() {

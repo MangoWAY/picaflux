@@ -51,4 +51,18 @@ describe('sanitizeProcessVideoOptions', () => {
     expect(o.mode).toBe('concat')
     expect(o.transcodePreset).toBe('web_mp4')
   })
+
+  it('coerces speed copy_streams to web_mp4 and clamps playbackSpeed', () => {
+    const o = sanitizeProcessVideoOptions({
+      mode: 'speed',
+      transcodePreset: 'copy_streams',
+      playbackSpeed: 10,
+    })
+    expect(o.transcodePreset).toBe('web_mp4')
+    expect(o.playbackSpeed).toBe(4)
+    const o2 = sanitizeProcessVideoOptions({ mode: 'speed', playbackSpeed: 0.05 })
+    expect(o2.playbackSpeed).toBe(0.25)
+    const o3 = sanitizeProcessVideoOptions({ mode: 'speed', playbackSpeed: '0,3' })
+    expect(o3.playbackSpeed).toBeCloseTo(0.3, 5)
+  })
 })

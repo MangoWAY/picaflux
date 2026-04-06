@@ -18,6 +18,7 @@ const base: VideoProcessFormState = {
   webpQualityStr: '75',
   videoRotation: '0',
   videoFlip: 'none',
+  playbackSpeedStr: '1',
 }
 
 describe('buildVideoProcessPayload', () => {
@@ -61,6 +62,32 @@ describe('buildVideoProcessPayload', () => {
     expect(p).toMatchObject({
       videoRotationDeg: 90,
       videoFlip: 'horizontal',
+    })
+  })
+
+  it('builds speed with playbackSpeed and optional maxWidth', () => {
+    expect(
+      buildVideoProcessPayload({
+        ...base,
+        mode: 'speed',
+        playbackSpeedStr: '2',
+        maxWidthStr: '0',
+      }),
+    ).toMatchObject({
+      mode: 'speed',
+      playbackSpeed: 2,
+      transcodePreset: 'web_mp4',
+    })
+    expect(
+      buildVideoProcessPayload({
+        ...base,
+        mode: 'speed',
+        playbackSpeedStr: '0,5',
+        maxWidthStr: '720',
+      }),
+    ).toMatchObject({
+      playbackSpeed: 0.5,
+      maxWidth: 720,
     })
   })
 

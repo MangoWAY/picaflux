@@ -9,6 +9,8 @@ export type ProcessVideoMode =
   | 'webp_anim'
   /** 按路径顺序合并多段（统一分辨率画布，需各段均有音轨） */
   | 'concat'
+  /** 变速：>1 快放，<1 慢放（重编码；无声视频仅处理画面） */
+  | 'speed'
 
 export type VideoFlipOption = 'none' | 'horizontal' | 'vertical' | 'both'
 
@@ -44,6 +46,8 @@ export interface ProcessVideoOptions {
   /** 顺时针旋转角度，仅允许 0 / 90 / 180 / 270 */
   videoRotationDeg?: number
   videoFlip?: VideoFlipOption
+  /** 播放倍速，如 2=两倍速，0.5=半速 */
+  playbackSpeed?: number
 }
 
 export interface SanitizedVideoOptions {
@@ -62,6 +66,7 @@ export interface SanitizedVideoOptions {
   webpQuality: number
   videoRotationDeg: 0 | 90 | 180 | 270
   videoFlip: VideoFlipOption
+  playbackSpeed: number
 }
 
 const MODES: ReadonlySet<ProcessVideoMode> = new Set([
@@ -73,6 +78,7 @@ const MODES: ReadonlySet<ProcessVideoMode> = new Set([
   'gif',
   'webp_anim',
   'concat',
+  'speed',
 ])
 
 const FLIPS: ReadonlySet<VideoFlipOption> = new Set(['none', 'horizontal', 'vertical', 'both'])
@@ -146,6 +152,17 @@ export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions
   if (mode === 'concat' && transcodePreset === 'copy_streams') {
     transcodePreset = 'web_mp4'
   }
+  if (mode === 'speed' && transcodePreset === 'copy_streams') {
+    transcodePreset = 'web_mp4'
+  }
+
+  const playbackRaw =
+    typeof d.playbackSpeed === 'number' && Number.isFinite(d.playbackSpeed)
+      ? d.playbackSpeed
+      : typeof d.playbackSpeed === 'string'
+        ? parseFloat(String(d.playbackSpeed).replace(',', '.'))
+        : NaN
+  const playbackSpeed = Number.isFinite(playbackRaw) ? Math.min(4, Math.max(0.25, playbackRaw)) : 1
 
   return {
     mode,
@@ -163,5 +180,6 @@ export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions
     webpQuality,
     videoRotationDeg,
     videoFlip,
+    playbackSpeed,
   }
 }
