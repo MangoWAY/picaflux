@@ -31,7 +31,7 @@ function formatClock(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-type TimelineMode = Extract<VideoWorkbenchMode, 'trim' | 'gif' | 'extract_frame'>
+type TimelineMode = Extract<VideoWorkbenchMode, 'trim' | 'gif' | 'webp_anim' | 'extract_frame'>
 
 export interface VideoTimelineProps {
   mode: TimelineMode
@@ -214,7 +214,7 @@ export function VideoTimeline({
   const playPct = (currentTime / durSafe) * 100
   const timePct = (timeSec / durSafe) * 100
 
-  const isTrim = mode === 'trim' || mode === 'gif'
+  const isTrim = mode === 'trim' || mode === 'gif' || mode === 'webp_anim'
 
   return (
     <div className="w-full rounded-lg border border-[#2d2d2d] bg-[#101010] px-3 py-3">

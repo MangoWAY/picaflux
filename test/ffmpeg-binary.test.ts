@@ -5,17 +5,23 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 
 describe('bundled ffmpeg / ffprobe', () => {
-  it('ffmpeg installer binary runs -version', () => {
-    const { path: ffmpegPath } = require('@ffmpeg-installer/ffmpeg') as { path: string }
-    const out = execFileSync(ffmpegPath, ['-version'], {
+  it('ffmpeg-static binary runs and includes libwebp encoder', () => {
+    const ffmpegPath = require('ffmpeg-static') as string
+    expect(typeof ffmpegPath).toBe('string')
+    const ver = execFileSync(ffmpegPath, ['-version'], {
       encoding: 'utf8',
       maxBuffer: 2 * 1024 * 1024,
     })
-    expect(out).toMatch(/ffmpeg version/i)
+    expect(ver).toMatch(/ffmpeg version/i)
+    const enc = execFileSync(ffmpegPath, ['-encoders'], {
+      encoding: 'utf8',
+      maxBuffer: 2 * 1024 * 1024,
+    })
+    expect(enc).toMatch(/libwebp/i)
   })
 
-  it('ffprobe installer binary runs -version', () => {
-    const { path: ffprobePath } = require('@ffprobe-installer/ffprobe') as { path: string }
+  it('ffprobe-static binary runs -version', () => {
+    const { path: ffprobePath } = require('ffprobe-static') as { path: string }
     const out = execFileSync(ffprobePath, ['-version'], {
       encoding: 'utf8',
       maxBuffer: 2 * 1024 * 1024,

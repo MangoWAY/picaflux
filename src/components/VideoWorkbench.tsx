@@ -51,6 +51,7 @@ const defaultForm: VideoProcessFormState = {
   audioFormat: 'aac',
   gifFpsStr: '10',
   gifMaxWidthStr: '480',
+  webpQualityStr: '75',
 }
 
 export function VideoWorkbench() {

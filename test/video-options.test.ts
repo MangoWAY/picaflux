@@ -17,6 +17,18 @@ describe('sanitizeProcessVideoOptions', () => {
     expect(o.gifFps).toBeLessThanOrEqual(15)
   })
 
+  it('clamps webp_anim like gif and quality', () => {
+    const o = sanitizeProcessVideoOptions({
+      mode: 'webp_anim',
+      durationSec: 999,
+      gifFps: 30,
+      webpQuality: 200,
+    })
+    expect(o.durationSec).toBeLessThanOrEqual(12)
+    expect(o.gifFps).toBeLessThanOrEqual(15)
+    expect(o.webpQuality).toBeLessThanOrEqual(100)
+  })
+
   it('preserves extract_frame interval and max count', () => {
     const o = sanitizeProcessVideoOptions({
       mode: 'extract_frame',

@@ -91,11 +91,20 @@ export function VideoPreviewPane({
 
   const src = previewVideo?.previewUrl
   const showTimeline = Boolean(
-    previewVideo && (form.mode === 'trim' || form.mode === 'gif' || form.mode === 'extract_frame'),
+    previewVideo &&
+    (form.mode === 'trim' ||
+      form.mode === 'gif' ||
+      form.mode === 'webp_anim' ||
+      form.mode === 'extract_frame'),
   )
 
   const timelineMode = useMemo(() => {
-    if (form.mode === 'trim' || form.mode === 'gif' || form.mode === 'extract_frame')
+    if (
+      form.mode === 'trim' ||
+      form.mode === 'gif' ||
+      form.mode === 'webp_anim' ||
+      form.mode === 'extract_frame'
+    )
       return form.mode
     return null
   }, [form.mode])

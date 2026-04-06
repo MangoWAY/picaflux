@@ -27,7 +27,7 @@ Stack: **Electron** · **Vite** · **React 18** · **TypeScript** · **Tailwind 
 - **Node.js** ≥ 18 (20 LTS recommended)
 - **npm** 9+
 
-Video processing uses bundled **ffmpeg** / **ffprobe** installers where possible; you may set `FFMPEG_PATH` and `FFPROBE_PATH` to use your own binaries.
+Video processing uses **`ffmpeg-static`** / **`ffprobe-static`** (broader codecs including **libwebp**); you may set `FFMPEG_PATH` and `FFPROBE_PATH` to override.
 
 ---
 

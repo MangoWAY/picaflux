@@ -15,6 +15,7 @@ const base: VideoProcessFormState = {
   audioFormat: 'aac',
   gifFpsStr: '10',
   gifMaxWidthStr: '480',
+  webpQualityStr: '75',
 }
 
 describe('buildVideoProcessPayload', () => {
@@ -43,6 +44,22 @@ describe('buildVideoProcessPayload', () => {
       timeSec: 1.5,
       frameIntervalSec: 2,
       maxFrameCount: 5,
+    })
+  })
+
+  it('builds webp_anim with quality', () => {
+    const p = buildVideoProcessPayload({
+      ...base,
+      mode: 'webp_anim',
+      startSecStr: '1',
+      durationSecStr: '3',
+      webpQualityStr: '80',
+    })
+    expect(p).toMatchObject({
+      mode: 'webp_anim',
+      startSec: 1,
+      durationSec: 3,
+      webpQuality: 80,
     })
   })
 })

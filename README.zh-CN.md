@@ -27,7 +27,7 @@
 - **Node.js** ≥ 18（建议 20 LTS）
 - **npm** 9+
 
-视频处理优先使用依赖自带的 **ffmpeg / ffprobe**；也可通过环境变量 `FFMPEG_PATH`、`FFPROBE_PATH` 指定本机二进制。
+视频处理使用 **`ffmpeg-static` / `ffprobe-static`**（编码器更全，含 **libwebp**）；也可通过环境变量 `FFMPEG_PATH`、`FFPROBE_PATH` 指定本机二进制。
 
 ---
 

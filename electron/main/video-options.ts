@@ -5,6 +5,8 @@ export type ProcessVideoMode =
   | 'audio_extract'
   | 'strip_audio'
   | 'gif'
+  /** 动图 WebP：ffmpeg `libwebp`（需当前使用的 ffmpeg 已编译启用 libwebp） */
+  | 'webp_anim'
 
 export type TranscodePreset = 'web_mp4' | 'copy_streams' | 'high_quality_mp4'
 
@@ -18,9 +20,9 @@ export interface ProcessVideoOptions {
   transcodePreset?: TranscodePreset
   /** 最长边上限（像素），0 表示不缩放 */
   maxWidth?: number
-  /** trim / extract_frame / gif */
+  /** trim / extract_frame / gif / webp_anim */
   startSec?: number
-  /** trim / gif：时长（秒） */
+  /** trim / gif / webp_anim：时长（秒） */
   durationSec?: number
   /** extract_frame：截取时刻（秒），默认 0 */
   timeSec?: number
@@ -30,9 +32,11 @@ export interface ProcessVideoOptions {
   frameFormat?: FrameImageFormat
   /** audio_extract */
   audioFormat?: AudioExtractFormat
-  /** gif */
+  /** gif / webp_anim */
   gifFps?: number
   gifMaxWidth?: number
+  /** webp_anim：质量 1–100，越高越清晰 */
+  webpQuality?: number
 }
 
 export interface SanitizedVideoOptions {
@@ -48,6 +52,7 @@ export interface SanitizedVideoOptions {
   audioFormat: AudioExtractFormat
   gifFps: number
   gifMaxWidth: number
+  webpQuality: number
 }
 
 const MODES: ReadonlySet<ProcessVideoMode> = new Set([
@@ -57,6 +62,7 @@ const MODES: ReadonlySet<ProcessVideoMode> = new Set([
   'audio_extract',
   'strip_audio',
   'gif',
+  'webp_anim',
 ])
 
 const PSETS: ReadonlySet<TranscodePreset> = new Set(['web_mp4', 'copy_streams', 'high_quality_mp4'])
@@ -99,11 +105,12 @@ export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions
 
   let gifFps = num(d.gifFps, 10, 1, 24)
   const gifMaxWidth = Math.round(num(d.gifMaxWidth, 480, 160, 1280))
+  const webpQuality = Math.round(num(d.webpQuality, 75, 1, 100))
 
-  if (mode === 'trim' || mode === 'gif') {
+  if (mode === 'trim' || mode === 'gif' || mode === 'webp_anim') {
     if (durationSec <= 0) durationSec = 60
   }
-  if (mode === 'gif') {
+  if (mode === 'gif' || mode === 'webp_anim') {
     durationSec = Math.min(durationSec, 12)
     gifFps = Math.min(gifFps, 15)
   }
@@ -126,5 +133,6 @@ export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions
     audioFormat,
     gifFps,
     gifMaxWidth,
+    webpQuality,
   }
 }

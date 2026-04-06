@@ -224,6 +224,21 @@ function buildAudioExtract(
   return cmd
 }
 
+function createGifEncodeCommand(
+  inputPath: string,
+  outputPath: string,
+  o: SanitizedVideoOptions,
+): FfmpegCommand {
+  const fps = o.gifFps
+  const w = o.gifMaxWidth
+  const vf = `fps=${fps},scale=${w}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=single[p];[s1][p]paletteuse=dither=bayer`
+  return ffmpeg(inputPath)
+    .setStartTime(o.startSec)
+    .setDuration(o.durationSec)
+    .outputOptions(['-an', '-vf', vf])
+    .output(outputPath)
+}
+
 function buildGif(
   inputPath: string,
   outputPath: string,
@@ -231,13 +246,47 @@ function buildGif(
   taskId: string,
   sender: WebContents,
 ) {
+  const cmd = createGifEncodeCommand(inputPath, outputPath, o)
+  cmd.on('progress', (p) => {
+    if (typeof p.percent === 'number') sendProgress(sender, taskId, p.percent)
+  })
+  return cmd
+}
+
+/** 动图 WebP：依赖 ffmpeg 编译时启用 libwebp（若报 Unknown encoder，请换用带 libwebp 的 ffmpeg 并设置 FFMPEG_PATH） */
+function buildWebpAnim(
+  inputPath: string,
+  outputPath: string,
+  o: SanitizedVideoOptions,
+  taskId: string,
+  sender: WebContents,
+): FfmpegCommand {
   const fps = o.gifFps
   const w = o.gifMaxWidth
-  const vf = `fps=${fps},scale=${w}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=single[p];[s1][p]paletteuse=dither=bayer`
+  const q = Math.round(o.webpQuality)
+  const vf = `fps=${fps},scale=${w}:-1:flags=lanczos`
   const cmd = ffmpeg(inputPath)
     .setStartTime(o.startSec)
     .setDuration(o.durationSec)
-    .outputOptions(['-an', '-vf', vf])
+    .outputOptions([
+      '-an',
+      '-vf',
+      vf,
+      '-c:v',
+      'libwebp',
+      '-lossless',
+      '0',
+      '-compression_level',
+      '4',
+      '-q:v',
+      String(q),
+      '-loop',
+      '0',
+      '-preset',
+      'default',
+      '-map_metadata',
+      '-1',
+    ])
     .output(outputPath)
 
   cmd.on('progress', (p) => {
@@ -257,7 +306,11 @@ function runCommand(cmd: FfmpegCommand, taskId: string, sender: WebContents): Pr
       })
       .on('error', (err: Error, _stdout, stderr) => {
         activeCommands.delete(taskId)
-        const msg = err?.message || stderr || 'ffmpeg error'
+        let msg = err?.message || stderr || 'ffmpeg error'
+        if (/Unknown encoder ['"]?libwebp/i.test(msg) || /Codec not found.*libwebp/i.test(msg)) {
+          msg +=
+            '（当前 ffmpeg 未启用 libwebp；请安装带 libwebp 的 ffmpeg 或通过 FFMPEG_PATH 指定）'
+        }
         reject(new Error(msg))
       })
       .run()
@@ -331,9 +384,14 @@ export async function processVideo(
   let info: VideoFileInfoPayload | null = null
 
   try {
-    if (o.mode === 'trim' || o.mode === 'gif' || o.mode === 'extract_frame') {
+    if (
+      o.mode === 'trim' ||
+      o.mode === 'gif' ||
+      o.mode === 'webp_anim' ||
+      o.mode === 'extract_frame'
+    ) {
       info = await getVideoFileInfo(inputPath)
-      if (info && o.mode === 'trim') {
+      if (info && (o.mode === 'trim' || o.mode === 'gif' || o.mode === 'webp_anim')) {
         const end = o.startSec + o.durationSec
         if (end > info.durationSec + 0.05 && info.durationSec > 0) {
           return {
@@ -389,6 +447,11 @@ export async function processVideo(
       case 'gif': {
         outputPath = path.join(outputDir, `${base}_clip.gif`)
         cmd = buildGif(inputPath, outputPath, o, taskId, sender)
+        break
+      }
+      case 'webp_anim': {
+        outputPath = path.join(outputDir, `${base}_clip.webp`)
+        cmd = buildWebpAnim(inputPath, outputPath, o, taskId, sender)
         break
       }
       case 'extract_frame': {

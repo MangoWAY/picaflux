@@ -10,6 +10,7 @@ const MODE_OPTIONS: { id: VideoWorkbenchMode; label: string }[] = [
   { id: 'audio_extract', label: '抽取音频' },
   { id: 'strip_audio', label: '去除音轨' },
   { id: 'gif', label: '导出 GIF' },
+  { id: 'webp_anim', label: '导出 WebP（动图）' },
 ]
 
 interface VideoSettingsPanelProps {
@@ -104,7 +105,7 @@ export function VideoSettingsPanel({
           </>
         ) : null}
 
-        {state.mode === 'trim' || state.mode === 'gif' ? (
+        {state.mode === 'trim' || state.mode === 'gif' || state.mode === 'webp_anim' ? (
           <>
             <div>
               <label className="mb-2 block text-xs font-medium text-gray-400">起始时间（秒）</label>
@@ -131,7 +132,7 @@ export function VideoSettingsPanel({
           </>
         ) : null}
 
-        {state.mode === 'gif' ? (
+        {state.mode === 'gif' || state.mode === 'webp_anim' ? (
           <>
             <div>
               <label className="mb-2 block text-xs font-medium text-gray-400">帧率（1–15）</label>
@@ -145,7 +146,9 @@ export function VideoSettingsPanel({
               />
             </div>
             <div>
-              <label className="mb-2 block text-xs font-medium text-gray-400">GIF 最大宽度</label>
+              <label className="mb-2 block text-xs font-medium text-gray-400">
+                {state.mode === 'webp_anim' ? 'WebP 最大宽度' : 'GIF 最大宽度'}
+              </label>
               <input
                 type="number"
                 min={160}
@@ -155,6 +158,22 @@ export function VideoSettingsPanel({
                 className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
               />
             </div>
+            {state.mode === 'webp_anim' ? (
+              <div>
+                <label className="mb-2 block text-xs font-medium text-gray-400">
+                  WebP 质量（1–100，越高越清晰；需 ffmpeg 启用 libwebp）
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={state.webpQualityStr}
+                  onChange={(e) => update('webpQualityStr', e.target.value)}
+                  disabled={isProcessing}
+                  className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
+                />
+              </div>
+            ) : null}
           </>
         ) : null}
 

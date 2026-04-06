@@ -31,9 +31,26 @@ function resourcesBin(name: 'ffmpeg' | 'ffprobe'): string | null {
   }
 }
 
+function resolveBundledFfmpeg(): string | null {
+  try {
+    const p = require('ffmpeg-static') as string | null
+    return typeof p === 'string' && p.length > 0 ? p : null
+  } catch {
+    return null
+  }
+}
+
+function resolveBundledFfprobe(): string | null {
+  try {
+    const m = require('ffprobe-static') as { path?: string }
+    return typeof m?.path === 'string' && m.path.length > 0 ? m.path : null
+  } catch {
+    return null
+  }
+}
+
 /**
- * 混合策略：`FFMPEG_PATH` / `FFPROBE_PATH` → `resources/ffmpeg-bin` → installer 包。
- * 环境变量可只设其一，缺失项由 installer 补齐。
+ * 混合策略：`FFMPEG_PATH` / `FFPROBE_PATH` → `resources/ffmpeg-bin` → `ffmpeg-static` / `ffprobe-static`（含 libwebp 等较全编码器）。
  */
 export function getFfmpegPathsForRuntime(): { ffmpeg: string; ffprobe: string } {
   const envFfmpeg = process.env.FFMPEG_PATH?.trim()
@@ -41,26 +58,18 @@ export function getFfmpegPathsForRuntime(): { ffmpeg: string; ffprobe: string } 
   const resFfmpeg = resourcesBin('ffmpeg')
   const resFfprobe = resourcesBin('ffprobe')
 
-  let ffmpegPath = envFfmpeg ?? resFfmpeg
-  let ffprobePath = envFfprobe ?? resFfprobe
+  const ffmpegPath = envFfmpeg ?? resFfmpeg ?? resolveBundledFfmpeg()
+  const ffprobePath = envFfprobe ?? resFfprobe ?? resolveBundledFfprobe()
 
   if (!ffmpegPath) {
-    try {
-      ffmpegPath = (require('@ffmpeg-installer/ffmpeg') as { path: string }).path
-    } catch {
-      throw new Error(
-        '未找到 ffmpeg。请设置 FFMPEG_PATH，或将 ffmpeg 放入打包资源的 ffmpeg-bin/，或安装 @ffmpeg-installer/ffmpeg。',
-      )
-    }
+    throw new Error(
+      '未找到 ffmpeg。请设置 FFMPEG_PATH，或将 ffmpeg 放入打包资源的 ffmpeg-bin/，并确保已安装依赖 ffmpeg-static（npm install 会下载二进制）。',
+    )
   }
   if (!ffprobePath) {
-    try {
-      ffprobePath = (require('@ffprobe-installer/ffprobe') as { path: string }).path
-    } catch {
-      throw new Error(
-        '未找到 ffprobe。请设置 FFPROBE_PATH，或将 ffprobe 放入打包资源的 ffmpeg-bin/，或安装 @ffprobe-installer/ffprobe。',
-      )
-    }
+    throw new Error(
+      '未找到 ffprobe。请设置 FFPROBE_PATH，或将 ffprobe 放入打包资源的 ffmpeg-bin/，并确保已安装依赖 ffprobe-static。',
+    )
   }
 
   assertBinaryExists(ffmpegPath, 'ffmpeg')

@@ -5,6 +5,7 @@ export type VideoWorkbenchMode =
   | 'audio_extract'
   | 'strip_audio'
   | 'gif'
+  | 'webp_anim'
 
 export interface VideoProcessFormState {
   mode: VideoWorkbenchMode
@@ -20,6 +21,8 @@ export interface VideoProcessFormState {
   audioFormat: 'aac' | 'mp3' | 'wav'
   gifFpsStr: string
   gifMaxWidthStr: string
+  /** 动图 WebP 质量 1–100 */
+  webpQualityStr: string
 }
 
 function parsePositiveFloat(s: string, fallback: number): number {
@@ -43,6 +46,7 @@ export function buildVideoProcessPayload(state: VideoProcessFormState): Record<s
   const maxFrameCount = parsePositiveInt(state.maxFrameCountStr, 60)
   const gifFps = parsePositiveFloat(state.gifFpsStr, 10)
   const gifMaxWidth = parsePositiveInt(state.gifMaxWidthStr, 480)
+  const webpQuality = parsePositiveInt(state.webpQualityStr, 75)
 
   const base: Record<string, unknown> = { mode: state.mode }
 
@@ -80,6 +84,15 @@ export function buildVideoProcessPayload(state: VideoProcessFormState): Record<s
         durationSec: durationSec > 0 ? durationSec : 4,
         gifFps,
         gifMaxWidth: gifMaxWidth > 0 ? gifMaxWidth : 480,
+      }
+    case 'webp_anim':
+      return {
+        ...base,
+        startSec,
+        durationSec: durationSec > 0 ? durationSec : 4,
+        gifFps,
+        gifMaxWidth: gifMaxWidth > 0 ? gifMaxWidth : 480,
+        webpQuality: webpQuality > 0 ? webpQuality : 75,
       }
     default:
       return base
