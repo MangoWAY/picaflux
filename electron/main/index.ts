@@ -32,6 +32,11 @@ import {
   registerBackgroundRemovalBackends,
   listBackgroundRemovalBackendMetas,
 } from './background-removal/registry'
+import {
+  listImageProcessPresets,
+  saveImageProcessPreset,
+  deleteImageProcessPreset,
+} from './image-process-presets'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -235,6 +240,26 @@ ipcMain.handle('image:getAlphaPreview', async (_, inputPath: string, options: un
 
 ipcMain.handle('image:listBackgroundRemovalBackends', () => {
   return listBackgroundRemovalBackendMetas()
+})
+
+ipcMain.handle('image:presets:list', async () => {
+  return await listImageProcessPresets(app.getPath('userData'))
+})
+
+ipcMain.handle('image:presets:save', async (_, payload: unknown) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { success: false, error: '参数无效' }
+  }
+  const o = payload as Record<string, unknown>
+  const name = typeof o.name === 'string' ? o.name : ''
+  return await saveImageProcessPreset(app.getPath('userData'), name, o.options)
+})
+
+ipcMain.handle('image:presets:delete', async (_, id: unknown) => {
+  if (typeof id !== 'string') {
+    return { success: false, error: '参数无效' }
+  }
+  return await deleteImageProcessPreset(app.getPath('userData'), id)
 })
 
 const VIDEO_DIALOG_EXT = ['mp4', 'mov', 'mkv', 'webm', 'm4v', 'avi', 'mpeg', 'mpg'] as const

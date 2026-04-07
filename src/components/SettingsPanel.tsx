@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   FolderOpen,
@@ -9,7 +9,10 @@ import {
   FlipHorizontal,
   FlipVertical,
   ChevronDown,
+  BookmarkPlus,
+  Trash2,
 } from 'lucide-react'
+import type { ImageProcessPresetRecord } from '@/lib/imagePreset'
 
 export type OutputFormatOption = 'original' | 'png' | 'jpeg' | 'webp' | 'avif'
 
@@ -97,6 +100,10 @@ interface SettingsPanelProps {
   /** 勾选参与处理的数量 */
   selectedForProcessCount: number
   totalImageCount: number
+  imagePresets: ImageProcessPresetRecord[]
+  onApplyImagePreset: (id: string) => void
+  onSaveImagePreset: (name: string) => Promise<{ success: boolean; error?: string }>
+  onDeleteImagePreset: (id: string) => Promise<{ success: boolean; error?: string }>
 }
 
 export function SettingsPanel({
@@ -107,10 +114,24 @@ export function SettingsPanel({
   isProcessing,
   selectedForProcessCount,
   totalImageCount,
+  imagePresets,
+  onApplyImagePreset,
+  onSaveImagePreset,
+  onDeleteImagePreset,
 }: SettingsPanelProps) {
   const updateOption = <K extends keyof ProcessOptions>(key: K, value: ProcessOptions[K]) => {
     onChange({ ...options, [key]: value })
   }
+
+  const [selectedPresetId, setSelectedPresetId] = useState('')
+  const [newPresetName, setNewPresetName] = useState('')
+  const [presetMessage, setPresetMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (selectedPresetId && !imagePresets.some((p) => p.id === selectedPresetId)) {
+      setSelectedPresetId('')
+    }
+  }, [imagePresets, selectedPresetId])
 
   const qualitySliderRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -142,6 +163,85 @@ export function SettingsPanel({
         className="min-h-0 min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto bg-[#1e1e1e] px-4 py-4"
         style={{ overscrollBehavior: 'none' }}
       >
+        <div className="space-y-3 rounded-lg border border-[#2d2d2d] bg-[#181818] p-3">
+          <span className="text-sm font-medium text-gray-300">参数预设</span>
+          <p className="text-[10px] leading-relaxed text-gray-500">
+            保存当前右侧全部处理参数（不含输出目录与中间预览里的裁剪框）。载入后裁剪仍按当前图；最多
+            40 条，超出时自动删掉最旧的一条。
+          </p>
+          <select
+            value={selectedPresetId}
+            onChange={(e) => {
+              setSelectedPresetId(e.target.value)
+              setPresetMessage(null)
+            }}
+            disabled={isProcessing}
+            className="w-full rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+          >
+            <option value="">选择预设…</option>
+            {imagePresets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={isProcessing || !selectedPresetId}
+              onClick={() => {
+                setPresetMessage(null)
+                onApplyImagePreset(selectedPresetId)
+              }}
+              className="flex flex-1 min-w-[5rem] items-center justify-center gap-1.5 rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-xs text-gray-200 transition-colors hover:border-blue-500/40 hover:bg-[#1e1e1e] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              载入
+            </button>
+            <button
+              type="button"
+              disabled={isProcessing || !selectedPresetId}
+              onClick={async () => {
+                setPresetMessage(null)
+                const r = await onDeleteImagePreset(selectedPresetId)
+                if (!r.success) setPresetMessage(r.error ?? '删除失败')
+              }}
+              className="flex flex-1 min-w-[5rem] items-center justify-center gap-1.5 rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-xs text-gray-200 transition-colors hover:border-red-500/40 hover:bg-[#1e1e1e] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              删除
+            </button>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              type="text"
+              value={newPresetName}
+              onChange={(e) => {
+                setNewPresetName(e.target.value)
+                setPresetMessage(null)
+              }}
+              placeholder="新预设名称"
+              disabled={isProcessing}
+              maxLength={80}
+              className="min-w-0 flex-1 rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-blue-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              disabled={isProcessing || !newPresetName.trim()}
+              onClick={async () => {
+                setPresetMessage(null)
+                const r = await onSaveImagePreset(newPresetName.trim())
+                if (r.success) setNewPresetName('')
+                else setPresetMessage(r.error ?? '保存失败')
+              }}
+              className="flex shrink-0 items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-500"
+            >
+              <BookmarkPlus className="h-3.5 w-3.5" />
+              保存当前
+            </button>
+          </div>
+          {presetMessage ? <p className="text-xs text-amber-500/95">{presetMessage}</p> : null}
+        </div>
+
         {/* Format */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-gray-400">Format</label>

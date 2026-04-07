@@ -40,6 +40,12 @@ interface Window {
       error?: string
     }>
     listBackgroundRemovalBackends: () => Promise<{ id: string; displayName: string }[]>
+    listImageProcessPresets: () => Promise<import('./lib/imagePreset').ImageProcessPresetRecord[]>
+    saveImageProcessPreset: (payload: {
+      name: string
+      options: import('./lib/imagePreset').ImageProcessPresetStored
+    }) => Promise<{ success: boolean; error?: string }>
+    deleteImageProcessPreset: (id: string) => Promise<{ success: boolean; error?: string }>
     platform: NodeJS.Platform
     openVideoFiles: () => Promise<string[]>
     processVideo: (

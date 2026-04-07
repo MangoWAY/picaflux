@@ -112,6 +112,17 @@ contextBridge.exposeInMainWorld('picafluxAPI', {
     ipcRenderer.invoke('image:listBackgroundRemovalBackends') as Promise<
       { id: string; displayName: string }[]
     >,
+  listImageProcessPresets: () => ipcRenderer.invoke('image:presets:list'),
+  saveImageProcessPreset: (payload: { name: string; options: unknown }) =>
+    ipcRenderer.invoke('image:presets:save', payload) as Promise<{
+      success: boolean
+      error?: string
+    }>,
+  deleteImageProcessPreset: (id: string) =>
+    ipcRenderer.invoke('image:presets:delete', id) as Promise<{
+      success: boolean
+      error?: string
+    }>,
   platform: process.platform,
 })
 

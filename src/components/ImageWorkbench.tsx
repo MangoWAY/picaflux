@@ -3,6 +3,11 @@ import { ImageStrip, ImageFile, type ImageStripListMode } from './ImageStrip'
 import { ImagePreviewPane } from './ImagePreviewPane'
 import { SettingsPanel, ProcessOptions, type ResizePercentPreset } from './SettingsPanel'
 import { FIXED_WATERMARK_DEFAULTS } from '@/constants/fixedWatermark'
+import {
+  mergePresetIntoOptions,
+  toPresetPayload,
+  type ImageProcessPresetRecord,
+} from '@/lib/imagePreset'
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|avif)$/i
 
@@ -53,6 +58,7 @@ export function ImageWorkbench({
   const [checkedPaths, setCheckedPaths] = useState<Set<string>>(() => new Set())
   const [previewPath, setPreviewPath] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [imagePresets, setImagePresets] = useState<ImageProcessPresetRecord[]>([])
   const [options, setOptions] = useState<ProcessOptions>({
     format: 'png',
     rotateQuarterTurns: 0,
@@ -107,6 +113,47 @@ export function ImageWorkbench({
       return next
     })
   }, [imagePathsKey])
+
+  const refreshImagePresets = useCallback(async () => {
+    try {
+      const list = await window.picafluxAPI.listImageProcessPresets()
+      setImagePresets(list)
+    } catch {
+      setImagePresets([])
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshImagePresets()
+  }, [refreshImagePresets])
+
+  const handleApplyImagePreset = useCallback(
+    (id: string) => {
+      const p = imagePresets.find((x) => x.id === id)
+      if (!p) return
+      setOptions((prev) => mergePresetIntoOptions(p.options, prev))
+    },
+    [imagePresets],
+  )
+
+  const handleSaveImagePreset = useCallback(
+    async (name: string) => {
+      const payload = toPresetPayload(options)
+      const r = await window.picafluxAPI.saveImageProcessPreset({ name, options: payload })
+      if (r.success) await refreshImagePresets()
+      return r
+    },
+    [options, refreshImagePresets],
+  )
+
+  const handleDeleteImagePreset = useCallback(
+    async (id: string) => {
+      const r = await window.picafluxAPI.deleteImageProcessPreset(id)
+      if (r.success) await refreshImagePresets()
+      return r
+    },
+    [refreshImagePresets],
+  )
 
   const mergeNewImages = useCallback((newEntries: ImageFile[]) => {
     setImages((prev) => {
@@ -389,6 +436,10 @@ export function ImageWorkbench({
         isProcessing={isProcessing}
         selectedForProcessCount={selectedCount}
         totalImageCount={images.length}
+        imagePresets={imagePresets}
+        onApplyImagePreset={handleApplyImagePreset}
+        onSaveImagePreset={handleSaveImagePreset}
+        onDeleteImagePreset={handleDeleteImagePreset}
       />
     </div>
   )
