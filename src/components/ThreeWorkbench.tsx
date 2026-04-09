@@ -35,6 +35,9 @@ export function ThreeWorkbench() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [outputDir, setOutputDir] = useState('')
   const [convertPreset, setConvertPreset] = useState<Convert3dPresetUi>('optimize')
+  const [textureMaxSize, setTextureMaxSize] = useState(2048)
+  const [textureFormat, setTextureFormat] = useState<'keep' | 'webp' | 'jpeg'>('webp')
+  const [textureQuality, setTextureQuality] = useState(80)
   const [viewportStats, setViewportStats] = useState<ModelStats | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
@@ -166,6 +169,49 @@ export function ThreeWorkbench() {
     setIsProcessing(false)
   }
 
+  const waitForCapture = async (): Promise<string | null> => {
+    // 模型加载 + 首帧渲染可能需要若干帧；这里做有限次重试避免卡死
+    for (let i = 0; i < 180; i++) {
+      await new Promise((r) => requestAnimationFrame(() => r(null)))
+      const dataUrl = previewRef.current?.captureThumbnailDataUrl()
+      if (dataUrl) return dataUrl
+    }
+    return null
+  }
+
+  const handleExportThumbnailsSelected = async () => {
+    const batch = models.filter((m) => checkedPaths.has(m.path))
+    if (!batch.length || !outputDir.trim()) return
+
+    setIsProcessing(true)
+    setStatusMessage(null)
+    let ok = 0
+    let lastErr: string | null = null
+
+    for (const m of batch) {
+      try {
+        setPreviewPath(m.path)
+        const dataUrl = await waitForCapture()
+        if (!dataUrl) {
+          lastErr = `${m.name}: 无法截取画布（模型可能尚未渲染完成）`
+          continue
+        }
+        const result = await window.picafluxAPI.save3dThumbnail(m.path, outputDir, dataUrl)
+        if (result.success) ok += 1
+        else lastErr = `${m.name}: ${result.error ?? '未知错误'}`
+      } catch (e: unknown) {
+        lastErr = `${m.name}: ${e instanceof Error ? e.message : '异常'}`
+      }
+    }
+
+    setIsProcessing(false)
+    setStatusMessage(
+      lastErr
+        ? `批量缩略图：${ok}/${batch.length} 成功 — ${lastErr}`
+        : `批量缩略图已完成：${ok}/${batch.length}。`,
+    )
+  }
+
   const handleConvertSelected = async () => {
     const batch = models.filter((m) => checkedPaths.has(m.path))
     if (!batch.length || !outputDir.trim()) return
@@ -176,7 +222,12 @@ export function ThreeWorkbench() {
       prev.map((m) => (checkedPaths.has(m.path) ? { ...m, status: 'processing' as const } : m)),
     )
 
-    const opts = { preset: convertPreset }
+    const opts = {
+      preset: convertPreset,
+      textureMaxSize,
+      textureFormat,
+      textureQuality,
+    }
     let lastError: string | null = null
     for (const m of batch) {
       try {
@@ -234,12 +285,19 @@ export function ThreeWorkbench() {
         convertPreset={convertPreset}
         onConvertPresetChange={setConvertPreset}
         onExportThumbnail={handleExportThumbnail}
+        onExportThumbnailsSelected={handleExportThumbnailsSelected}
         onConvertSelected={handleConvertSelected}
         isProcessing={isProcessing}
         canExportThumbnail={Boolean(previewPath && outputDir.trim())}
         selectedForProcessCount={selectedCount}
         totalModelCount={models.length}
         statusMessage={statusMessage}
+        textureMaxSize={textureMaxSize}
+        textureFormat={textureFormat}
+        textureQuality={textureQuality}
+        onTextureMaxSizeChange={setTextureMaxSize}
+        onTextureFormatChange={setTextureFormat}
+        onTextureQualityChange={setTextureQuality}
       />
     </>
   )

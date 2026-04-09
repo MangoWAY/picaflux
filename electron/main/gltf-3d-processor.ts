@@ -1,5 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import sharp from 'sharp'
 import { NodeIO } from '@gltf-transform/core'
 import { dedup, prune } from '@gltf-transform/functions'
 import { sanitizeProcess3dOptions, type SanitizedProcess3dOptions } from './gltf-3d-options'
@@ -119,6 +120,58 @@ export async function processGlbConvert(
     if (opts.preset === 'optimize') {
       await doc.transform(prune(), dedup())
     }
+
+    if (opts.textureMaxSize > 0 || opts.textureFormat !== 'keep') {
+      const root = doc.getRoot()
+      const textures = root.listTextures()
+      for (const tex of textures) {
+        const img = tex.getImage()
+        if (!img) continue
+        const buf = Buffer.from(img as Uint8Array)
+        const meta = await sharp(buf)
+          .metadata()
+          .catch(() => null)
+        const hasAlpha = Boolean(meta?.hasAlpha)
+
+        let pipeline = sharp(buf, { failOn: 'none' })
+        if (opts.textureMaxSize > 0) {
+          pipeline = pipeline.resize({
+            width: opts.textureMaxSize,
+            height: opts.textureMaxSize,
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+        }
+
+        const requested = opts.textureFormat
+        const fmt =
+          requested === 'keep'
+            ? (() => {
+                const mt = tex.getMimeType()
+                if (mt === 'image/jpeg' || mt === 'image/jpg') return 'jpeg' as const
+                if (mt === 'image/webp') return 'webp' as const
+                if (mt === 'image/png') return 'png' as const
+                return null
+              })()
+            : requested === 'jpeg' && hasAlpha
+              ? ('webp' as const)
+              : requested
+
+        if (!fmt) continue
+
+        const q = opts.textureQuality
+        const out =
+          fmt === 'webp'
+            ? await pipeline.webp({ quality: q }).toBuffer()
+            : fmt === 'jpeg'
+              ? await pipeline.jpeg({ quality: q, mozjpeg: true }).toBuffer()
+              : await pipeline.png({ compressionLevel: 9 }).toBuffer()
+
+        tex.setImage(out)
+        tex.setMimeType(fmt === 'webp' ? 'image/webp' : fmt === 'jpeg' ? 'image/jpeg' : 'image/png')
+      }
+    }
+
     const base = safeFileBase(path.parse(inputPath).name)
     const suffix = opts.preset === 'optimize' ? '_optimized' : '_out'
     const outPath = path.join(outputDir, `${base}${suffix}.glb`)
