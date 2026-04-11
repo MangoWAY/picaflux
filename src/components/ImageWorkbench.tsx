@@ -382,6 +382,18 @@ export function ImageWorkbench({
 
   const previewImage = previewPath ? (images.find((i) => i.path === previewPath) ?? null) : null
 
+  const handleNavigatePreview = useCallback(
+    (delta: -1 | 1) => {
+      if (images.length === 0) return
+      const idx = previewPath ? images.findIndex((i) => i.path === previewPath) : -1
+      const cur = idx >= 0 ? idx : 0
+      const len = images.length
+      const next = (cur + delta + len) % len
+      setPreviewPath(images[next].path)
+    },
+    [images, previewPath],
+  )
+
   const fixedWatermarkRegionForPreview = useMemo(() => {
     if (!options.clearFixedWatermark) return null
     const parseWatermarkPct = (s: string, fallback: number) => {
@@ -446,6 +458,7 @@ export function ImageWorkbench({
         cropEnabled={options.cropEnabled}
         cropNorm={options.cropNorm}
         onCropNormChange={(rect) => setOptions((prev) => ({ ...prev, cropNorm: rect }))}
+        onNavigatePreview={handleNavigatePreview}
       />
       <SettingsPanel
         options={options}

@@ -59,6 +59,8 @@ interface ImagePreviewPaneProps {
   cropEnabled?: boolean
   cropNorm?: { x: number; y: number; w: number; h: number }
   onCropNormChange?: (rect: { x: number; y: number; w: number; h: number }) => void
+  /** 在预览区用 ← / → 切换列表中的上一张 / 下一张（与左侧顺序一致） */
+  onNavigatePreview?: (delta: -1 | 1) => void
 }
 
 const MIN_CROP_FRAC = 0.02
@@ -171,6 +173,7 @@ export function ImagePreviewPane({
   cropEnabled = false,
   cropNorm = { x: 0, y: 0, w: 1, h: 1 },
   onCropNormChange,
+  onNavigatePreview,
 }: ImagePreviewPaneProps) {
   const collectPathsFromDataTransfer = useCallback((dt: DataTransfer): string[] => {
     const paths: string[] = []
@@ -588,6 +591,26 @@ export function ImagePreviewPane({
       ),
     }
   }, [imgLayout?.scale, zoom])
+
+  useEffect(() => {
+    if (!onNavigatePreview || images.length === 0) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      const elTarget = e.target as HTMLElement | null
+      if (elTarget?.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        onNavigatePreview(-1)
+        return
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        onNavigatePreview(1)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onNavigatePreview, images.length])
+
   return (
     <div
       className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-[#121212]"
@@ -599,9 +622,12 @@ export function ImagePreviewPane({
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-white">Image Processing</h1>
           {images.length > 0 && (
-            <p className="truncate text-xs text-gray-500">
-              已选 {selectedCount} / {images.length} 张将使用右侧参数处理
-            </p>
+            <>
+              <p className="truncate text-xs text-gray-500">
+                已选 {selectedCount} / {images.length} 张将使用右侧参数处理
+              </p>
+              <p className="mt-0.5 text-[10px] text-gray-600">← → 切换预览图片</p>
+            </>
           )}
         </div>
         <button
