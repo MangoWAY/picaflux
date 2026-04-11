@@ -58,6 +58,9 @@ export function ImageWorkbench({
   const [checkedPaths, setCheckedPaths] = useState<Set<string>>(() => new Set())
   const [previewPath, setPreviewPath] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(
+    null,
+  )
   const [imagePresets, setImagePresets] = useState<ImageProcessPresetRecord[]>([])
   const [options, setOptions] = useState<ProcessOptions>({
     format: 'png',
@@ -236,7 +239,9 @@ export function ImageWorkbench({
     setIsProcessing(true)
     setImages((prev) =>
       prev.map((img) =>
-        checkedPaths.has(img.path) ? { ...img, status: 'processing' as const } : img,
+        checkedPaths.has(img.path)
+          ? { ...img, status: 'processing' as const, lastError: undefined }
+          : img,
       ),
     )
 
@@ -334,31 +339,45 @@ export function ImageWorkbench({
     const sliceRows = parseGridDim(options.sliceRows, 4)
     const sliceCols = parseGridDim(options.sliceCols, 4)
 
-    for (const img of batch) {
-      try {
-        const result = options.sliceEnabled
-          ? await window.picafluxAPI.sliceImageGrid(img.path, options.outputDir, {
-              ...processOpts,
-              rows: sliceRows,
-              cols: sliceCols,
-              xLines: options.sliceXLines,
-              yLines: options.sliceYLines,
-            })
-          : await window.picafluxAPI.processImage(img.path, options.outputDir, processOpts)
+    setBatchProgress({ current: 0, total: batch.length })
+    try {
+      for (let i = 0; i < batch.length; i++) {
+        const img = batch[i]
+        setBatchProgress({ current: i + 1, total: batch.length })
+        try {
+          const result = options.sliceEnabled
+            ? await window.picafluxAPI.sliceImageGrid(img.path, options.outputDir, {
+                ...processOpts,
+                rows: sliceRows,
+                cols: sliceCols,
+                xLines: options.sliceXLines,
+                yLines: options.sliceYLines,
+              })
+            : await window.picafluxAPI.processImage(img.path, options.outputDir, processOpts)
 
-        setImages((prev) =>
-          prev.map((p) =>
-            p.path === img.path ? { ...p, status: result.success ? 'done' : 'error' } : p,
-          ),
-        )
-      } catch {
-        setImages((prev) =>
-          prev.map((p) => (p.path === img.path ? { ...p, status: 'error' as const } : p)),
-        )
+          setImages((prev) =>
+            prev.map((p) =>
+              p.path === img.path
+                ? {
+                    ...p,
+                    status: result.success ? 'done' : 'error',
+                    lastError: result.success ? undefined : (result.error ?? '处理失败'),
+                  }
+                : p,
+            ),
+          )
+        } catch {
+          setImages((prev) =>
+            prev.map((p) =>
+              p.path === img.path ? { ...p, status: 'error' as const, lastError: '处理失败' } : p,
+            ),
+          )
+        }
       }
+    } finally {
+      setBatchProgress(null)
+      setIsProcessing(false)
     }
-
-    setIsProcessing(false)
   }
 
   const previewImage = previewPath ? (images.find((i) => i.path === previewPath) ?? null) : null
@@ -440,6 +459,7 @@ export function ImageWorkbench({
         onApplyImagePreset={handleApplyImagePreset}
         onSaveImagePreset={handleSaveImagePreset}
         onDeleteImagePreset={handleDeleteImagePreset}
+        batchProgress={batchProgress}
       />
     </div>
   )

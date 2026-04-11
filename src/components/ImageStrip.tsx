@@ -1,5 +1,5 @@
 import React, { useCallback, useLayoutEffect, useRef } from 'react'
-import { LayoutGrid, List, X, FileImage } from 'lucide-react'
+import { Copy, LayoutGrid, List, X, FileImage } from 'lucide-react'
 import clsx from 'clsx'
 
 export interface ImageFile {
@@ -11,6 +11,7 @@ export interface ImageFile {
   format?: string
   status: 'pending' | 'processing' | 'done' | 'error'
   previewUrl?: string
+  lastError?: string
 }
 
 export type ImageStripListMode = 'thumbnail' | 'name'
@@ -30,6 +31,14 @@ interface ImageStripProps {
 
 function statusLabel(status: ImageFile['status']): string {
   return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+async function copyToClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    /* ignore */
+  }
 }
 
 export function ImageStrip({
@@ -182,6 +191,28 @@ export function ImageStrip({
                         >
                           {img.name}
                         </p>
+                        {img.status === 'error' && img.lastError ? (
+                          <div className="mt-1 flex items-start gap-1">
+                            <p
+                              className="min-w-0 flex-1 text-left text-[10px] leading-snug text-red-400/95 line-clamp-4"
+                              title={img.lastError}
+                            >
+                              {img.lastError}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void copyToClipboard(img.lastError ?? '')
+                              }}
+                              className="shrink-0 rounded p-1 text-gray-500 hover:bg-white/10 hover:text-gray-200"
+                              title="复制错误信息"
+                              aria-label="复制错误信息"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                     <button
@@ -235,9 +266,26 @@ export function ImageStrip({
                         className="rounded border-[#3d3d3d] bg-[#121212] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
                       />
                     </label>
-                    <span className="min-w-0 flex-1 truncate text-gray-200" title={img.name}>
+                    <span
+                      className="min-w-0 flex-1 truncate text-gray-200"
+                      title={img.status === 'error' && img.lastError ? img.lastError : img.name}
+                    >
                       {img.name}
                     </span>
+                    {img.status === 'error' && img.lastError ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void copyToClipboard(img.lastError ?? '')
+                        }}
+                        className="shrink-0 rounded p-1 text-gray-500 hover:bg-white/10 hover:text-gray-200"
+                        title="复制错误信息"
+                        aria-label="复制错误信息"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
                     <span
                       className={clsx(
                         'shrink-0 text-[10px] font-medium uppercase',

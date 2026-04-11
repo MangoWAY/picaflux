@@ -104,6 +104,8 @@ interface SettingsPanelProps {
   onApplyImagePreset: (id: string) => void
   onSaveImagePreset: (name: string) => Promise<{ success: boolean; error?: string }>
   onDeleteImagePreset: (id: string) => Promise<{ success: boolean; error?: string }>
+  /** 批量处理时当前序号；仅当 total 大于 1 时展示 */
+  batchProgress: { current: number; total: number } | null
 }
 
 export function SettingsPanel({
@@ -118,6 +120,7 @@ export function SettingsPanel({
   onApplyImagePreset,
   onSaveImagePreset,
   onDeleteImagePreset,
+  batchProgress,
 }: SettingsPanelProps) {
   const updateOption = <K extends keyof ProcessOptions>(key: K, value: ProcessOptions[K]) => {
     onChange({ ...options, [key]: value })
@@ -142,6 +145,8 @@ export function SettingsPanel({
     return () => el.removeEventListener('wheel', stop)
   }, [])
 
+  const canStart = selectedForProcessCount > 0 && Boolean(options.outputDir.trim())
+
   return (
     <div
       className="flex h-full min-h-0 w-[min(100%,22rem)] shrink-0 flex-col border-l border-[#2d2d2d] bg-[#1e1e1e] text-gray-300"
@@ -150,7 +155,7 @@ export function SettingsPanel({
       <div className="h-14 shrink-0 flex flex-col justify-center border-b border-[#2d2d2d] px-4">
         <div className="flex items-center">
           <SlidersHorizontal className="mr-2 h-5 w-5 text-gray-400" />
-          <h2 className="font-semibold text-white">Processing</h2>
+          <h2 className="font-semibold text-white">图片处理</h2>
         </div>
         {totalImageCount > 0 && (
           <p className="mt-0.5 pl-7 text-[11px] text-gray-500">
@@ -242,9 +247,9 @@ export function SettingsPanel({
           {presetMessage ? <p className="text-xs text-amber-500/95">{presetMessage}</p> : null}
         </div>
 
-        {/* Format */}
+        {/* 输出格式 */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-400">Format</label>
+          <label className="text-sm font-medium text-gray-400">输出格式</label>
           <select
             value={options.format}
             onChange={(e) => {
@@ -253,7 +258,7 @@ export function SettingsPanel({
             }}
             className="w-full bg-[#121212] border border-[#3d3d3d] rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
           >
-            <option value="original">Original</option>
+            <option value="original">与原图相同</option>
             <option value="png">PNG</option>
             <option value="jpeg">JPEG</option>
             <option value="webp">WebP</option>
@@ -368,7 +373,7 @@ export function SettingsPanel({
         <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
           <div className="flex items-center justify-between gap-3 px-3 py-3">
             <div className="min-w-0">
-              <span className="text-sm font-medium text-gray-200">Trim 透明边</span>
+              <span className="text-sm font-medium text-gray-200">裁切透明边</span>
               <p className="mt-0.5 text-[10px] text-gray-500">
                 裁剪掉四周完全透明的像素，默认额外保留 2px 透明边
               </p>
@@ -376,7 +381,7 @@ export function SettingsPanel({
             <PanelToggle
               checked={options.trimTransparent}
               onChange={(v) => updateOption('trimTransparent', v)}
-              ariaLabel="Trim 透明边"
+              ariaLabel="裁切透明边"
             />
           </div>
           {options.trimTransparent && (
@@ -531,10 +536,10 @@ export function SettingsPanel({
           </div>
         </div>
 
-        {/* Quality */}
+        {/* 质量 */}
         <div className="space-y-2">
           <div className="flex justify-between items-center">
-            <label className="text-sm font-medium text-gray-400">Quality</label>
+            <label className="text-sm font-medium text-gray-400">质量</label>
             <span className="text-sm text-gray-300">{options.quality}%</span>
           </div>
           <input
@@ -629,20 +634,20 @@ export function SettingsPanel({
           </div>
         </div>
 
-        {/* Output */}
+        {/* 输出目录 */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-400">Output Folder</label>
+          <label className="text-sm font-medium text-gray-400">输出目录</label>
           <div className="flex gap-2">
             <div
-              className="flex-1 bg-[#121212] border border-[#3d3d3d] rounded-md px-3 py-2 text-sm text-gray-400 truncate"
-              title={options.outputDir || 'Not selected'}
+              className="flex-1 truncate rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-sm text-gray-400"
+              title={options.outputDir || '未选择'}
             >
-              {options.outputDir || 'Select a folder...'}
+              {options.outputDir || '请选择文件夹…'}
             </div>
             <button
               onClick={onSelectOutputDir}
-              className="p-2 bg-[#2d2d2d] hover:bg-[#3d3d3d] rounded-md transition-colors text-gray-300"
-              title="Select Folder"
+              className="rounded-md bg-[#2d2d2d] p-2 text-gray-300 transition-colors hover:bg-[#3d3d3d]"
+              title="选择文件夹"
             >
               <FolderOpen className="w-5 h-5" />
             </button>
@@ -729,12 +734,28 @@ export function SettingsPanel({
             )}
           </div>
         </div>
+
+        {isProcessing && batchProgress && batchProgress.total > 1 ? (
+          <p className="text-[11px] text-gray-400">
+            正在处理第 {batchProgress.current} / {batchProgress.total} 张
+          </p>
+        ) : null}
+        {!canStart && !isProcessing ? (
+          <p className="text-xs text-amber-500/90">
+            {selectedForProcessCount === 0
+              ? '请至少勾选一张图片。'
+              : !options.outputDir.trim()
+                ? '请选择输出目录。'
+                : ''}
+          </p>
+        ) : null}
       </div>
 
       <div className="shrink-0 border-t border-[#2d2d2d] bg-[#1e1e1e] px-4 py-4">
         <button
+          type="button"
           onClick={onStartProcessing}
-          disabled={selectedForProcessCount === 0 || !options.outputDir || isProcessing}
+          disabled={!canStart || isProcessing}
           className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 py-2.5 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-500"
         >
           {isProcessing ? (
@@ -743,10 +764,10 @@ export function SettingsPanel({
             <Play className="h-5 w-5" />
           )}
           {isProcessing
-            ? 'Processing...'
+            ? '处理中…'
             : selectedForProcessCount > 0
-              ? `Start Processing (${selectedForProcessCount})`
-              : 'Start Processing'}
+              ? `开始处理（${selectedForProcessCount}）`
+              : '开始处理'}
         </button>
       </div>
     </div>
