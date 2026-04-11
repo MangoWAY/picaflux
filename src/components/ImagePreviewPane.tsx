@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import clsx from 'clsx'
 import { UploadCloud, FileImage, Hand } from 'lucide-react'
 import type { ImageFile } from './ImageStrip'
+import type { WatermarkRegionPercents } from '@/lib/imageProcessPayload'
 
 /** 阻止 range input 上的 wheel 事件改变滑块值 */
 function usePreventWheelOnRef(ref: React.RefObject<HTMLInputElement | null>) {
@@ -17,15 +18,10 @@ function usePreventWheelOnRef(ref: React.RefObject<HTMLInputElement | null>) {
 const IMAGE_EXT = /\.(jpe?g|png|webp|avif)$/i
 
 /** 与导出时 fixedWatermarkRegion 百分比语义一致（相对原图宽高） */
-export type FixedWatermarkRegionPercent = {
-  leftPercent: number
-  topPercent: number
-  widthPercent: number
-  heightPercent: number
-}
+export type FixedWatermarkRegionPercent = WatermarkRegionPercents
 
 function pixelRectFromWatermarkPercent(
-  region: FixedWatermarkRegionPercent,
+  region: WatermarkRegionPercents,
   w: number,
   h: number,
 ): { x: number; y: number; width: number; height: number } {
@@ -620,7 +616,7 @@ export function ImagePreviewPane({
     >
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#2d2d2d] px-6">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-white">Image Processing</h1>
+          <h1 className="text-lg font-semibold text-white">图片预览</h1>
           {images.length > 0 && (
             <>
               <p className="truncate text-xs text-gray-500">
@@ -635,7 +631,7 @@ export function ImagePreviewPane({
           onClick={onAddImages}
           className="shrink-0 rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
         >
-          Add Images
+          添加图片
         </button>
       </div>
 
@@ -648,7 +644,7 @@ export function ImagePreviewPane({
           >
             <UploadCloud className="mb-4 h-12 w-12 text-gray-600" />
             <p className="mb-1 text-lg font-medium text-gray-300">拖放图片到此处</p>
-            <p className="text-sm">或点击右上角「Add Images」</p>
+            <p className="text-sm">或点击右上角「添加图片」</p>
           </div>
         ) : previewImage ? (
           <div className="flex h-full min-h-0 flex-col gap-3">

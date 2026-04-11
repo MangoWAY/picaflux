@@ -1,13 +1,19 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { ImageStrip, ImageFile, type ImageStripListMode } from './ImageStrip'
 import { ImagePreviewPane } from './ImagePreviewPane'
-import { SettingsPanel, ProcessOptions, type ResizePercentPreset } from './SettingsPanel'
-import { FIXED_WATERMARK_DEFAULTS } from '@/constants/fixedWatermark'
+import { SettingsPanel } from './SettingsPanel'
+import type { ProcessOptions } from '@/lib/imageProcessOptions'
 import {
   mergePresetIntoOptions,
   toPresetPayload,
   type ImageProcessPresetRecord,
 } from '@/lib/imagePreset'
+import {
+  buildProcessImageInvokeOptions,
+  getWatermarkRegionPercents,
+  parseSliceGridDimension,
+} from '@/lib/imageProcessPayload'
+import { FIXED_WATERMARK_DEFAULTS } from '@/constants/fixedWatermark'
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|avif)$/i
 
@@ -30,22 +36,6 @@ async function buildImageEntries(paths: string[]): Promise<ImageFile[]> {
     }),
   )
   return entries
-}
-
-function effectiveResizeScalePercent(options: ProcessOptions): number {
-  if (options.resizeMode !== 'percent') return 100
-  if (options.resizePercentPreset === 'none') return 100
-  if (options.resizePercentPreset === 'custom') {
-    const n = parseFloat(String(options.resizeCustomPercentStr).replace(',', '.'))
-    if (!Number.isFinite(n)) return 100
-    return Math.min(400, Math.max(1, Math.round(n)))
-  }
-  const map: Record<Exclude<ResizePercentPreset, 'custom' | 'none'>, number> = {
-    p75: 75,
-    p50: 50,
-    p25: 25,
-  }
-  return map[options.resizePercentPreset]
 }
 
 export function ImageWorkbench({
@@ -257,87 +247,9 @@ export function ImageWorkbench({
       }
     }
 
-    const parseWatermarkPct = (s: string, fallback: number) => {
-      const n = parseFloat(s)
-      if (!Number.isFinite(n)) return fallback
-      return Math.min(100, Math.max(0, n))
-    }
-    const wmDefaults = {
-      left: parseFloat(FIXED_WATERMARK_DEFAULTS.leftPercent),
-      top: parseFloat(FIXED_WATERMARK_DEFAULTS.topPercent),
-      width: parseFloat(FIXED_WATERMARK_DEFAULTS.widthPercent),
-      height: parseFloat(FIXED_WATERMARK_DEFAULTS.heightPercent),
-    }
-
-    const rq = ((options.rotateQuarterTurns % 4) + 4) % 4
-
-    const parseDim = (s: string) => {
-      const n = parseInt(s, 10)
-      return Number.isFinite(n) && n > 0 ? n : undefined
-    }
-    const pixelW = options.resizeMode === 'pixels' ? parseDim(options.width) : undefined
-    const pixelH = options.resizeMode === 'pixels' ? parseDim(options.height) : undefined
-    const scalePct = options.resizeMode === 'percent' ? effectiveResizeScalePercent(options) : 100
-
-    const processOpts = {
-      format: options.format,
-      ...(rq !== 0 ? { rotateQuarterTurns: rq } : {}),
-      ...(options.flipHorizontal ? { flipHorizontal: true } : {}),
-      ...(options.flipVertical ? { flipVertical: true } : {}),
-      quality: options.quality,
-      ...(pixelW !== undefined || pixelH !== undefined
-        ? {
-            width: pixelW,
-            height: pixelH,
-            keepAspectRatio: options.keepAspectRatio,
-          }
-        : {}),
-      ...(options.resizeMode === 'percent' && scalePct !== 100 ? { scalePercent: scalePct } : {}),
-      removeBackground: options.removeBackground,
-      backgroundRemovalBackendId: removalBackendId,
-      clearFixedWatermark: options.clearFixedWatermark,
-      fixedWatermarkRegion: options.clearFixedWatermark
-        ? {
-            leftPercent: parseWatermarkPct(options.watermarkLeftPct, wmDefaults.left),
-            topPercent: parseWatermarkPct(options.watermarkTopPct, wmDefaults.top),
-            widthPercent: Math.max(
-              0.5,
-              parseWatermarkPct(options.watermarkWidthPct, wmDefaults.width),
-            ),
-            heightPercent: Math.max(
-              0.5,
-              parseWatermarkPct(options.watermarkHeightPct, wmDefaults.height),
-            ),
-          }
-        : undefined,
-      ...(options.cropEnabled
-        ? {
-            crop: {
-              x: options.cropNorm.x,
-              y: options.cropNorm.y,
-              width: options.cropNorm.w,
-              height: options.cropNorm.h,
-            },
-          }
-        : {}),
-      ...(options.trimTransparent
-        ? {
-            trimTransparent: true,
-            trimPaddingPx: (() => {
-              const n = parseInt(String(options.trimPaddingPx), 10)
-              return Number.isFinite(n) ? Math.min(512, Math.max(0, n)) : 2
-            })(),
-          }
-        : {}),
-    }
-
-    const parseGridDim = (s: string, fallback: number) => {
-      const n = parseInt(s, 10)
-      if (!Number.isFinite(n)) return fallback
-      return Math.min(64, Math.max(1, n))
-    }
-    const sliceRows = parseGridDim(options.sliceRows, 4)
-    const sliceCols = parseGridDim(options.sliceCols, 4)
+    const processOpts = buildProcessImageInvokeOptions(options, removalBackendId)
+    const sliceRows = parseSliceGridDimension(options.sliceRows, 4)
+    const sliceCols = parseSliceGridDimension(options.sliceCols, 4)
 
     setBatchProgress({ current: 0, total: batch.length })
     try {
@@ -394,35 +306,7 @@ export function ImageWorkbench({
     [images, previewPath],
   )
 
-  const fixedWatermarkRegionForPreview = useMemo(() => {
-    if (!options.clearFixedWatermark) return null
-    const parseWatermarkPct = (s: string, fallback: number) => {
-      const n = parseFloat(s)
-      if (!Number.isFinite(n)) return fallback
-      return Math.min(100, Math.max(0, n))
-    }
-    const wmDefaults = {
-      left: parseFloat(FIXED_WATERMARK_DEFAULTS.leftPercent),
-      top: parseFloat(FIXED_WATERMARK_DEFAULTS.topPercent),
-      width: parseFloat(FIXED_WATERMARK_DEFAULTS.widthPercent),
-      height: parseFloat(FIXED_WATERMARK_DEFAULTS.heightPercent),
-    }
-    return {
-      leftPercent: parseWatermarkPct(options.watermarkLeftPct, wmDefaults.left),
-      topPercent: parseWatermarkPct(options.watermarkTopPct, wmDefaults.top),
-      widthPercent: Math.max(0.5, parseWatermarkPct(options.watermarkWidthPct, wmDefaults.width)),
-      heightPercent: Math.max(
-        0.5,
-        parseWatermarkPct(options.watermarkHeightPct, wmDefaults.height),
-      ),
-    }
-  }, [
-    options.clearFixedWatermark,
-    options.watermarkLeftPct,
-    options.watermarkTopPct,
-    options.watermarkWidthPct,
-    options.watermarkHeightPct,
-  ])
+  const fixedWatermarkRegionForPreview = getWatermarkRegionPercents(options)
   const selectedCount = checkedPaths.size
 
   return (

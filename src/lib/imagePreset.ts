@@ -2,7 +2,7 @@ import type {
   OutputFormatOption,
   ProcessOptions,
   ResizePercentPreset,
-} from '../components/SettingsPanel'
+} from '@/lib/imageProcessOptions'
 import { FIXED_WATERMARK_DEFAULTS } from '../constants/fixedWatermark'
 
 /** 写入磁盘的预设体：不含输出目录与裁剪（与当前素材绑定） */

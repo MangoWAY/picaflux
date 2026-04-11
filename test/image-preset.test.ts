@@ -6,7 +6,7 @@ import {
   toPresetPayload,
   type ImageProcessPresetStored,
 } from '../src/lib/imagePreset'
-import type { ProcessOptions } from '../src/components/SettingsPanel'
+import type { ProcessOptions } from '../src/lib/imageProcessOptions'
 
 const fullOptions = (): ProcessOptions => ({
   format: 'webp',

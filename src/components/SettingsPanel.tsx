@@ -13,57 +13,13 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { ImageProcessPresetRecord } from '@/lib/imagePreset'
+import { isOutputFormatOption, type ProcessOptions } from '@/lib/imageProcessOptions'
 
-export type OutputFormatOption = 'original' | 'png' | 'jpeg' | 'webp' | 'avif'
-
-/** none：不按比例缩放；再点同一百分比可回到 none */
-export type ResizePercentPreset = 'none' | 'p75' | 'p50' | 'p25' | 'custom'
-
-export interface ProcessOptions {
-  format: OutputFormatOption
-  /** 累计 90° 步数（可正可负、不取模），导出时对 4 取模；预览用此值算角度以保证动画走最短弧 */
-  rotateQuarterTurns: number
-  flipHorizontal: boolean
-  flipVertical: boolean
-  /** 切图：按网格均分输出 */
-  sliceEnabled: boolean
-  sliceRows: string
-  sliceCols: string
-  /** 自定义切图线（0.0~1.0 的比例），如果为空则使用均分 */
-  sliceXLines?: number[]
-  sliceYLines?: number[]
-  /** 百分比缩放与像素缩放二选一 */
-  resizeMode: 'percent' | 'pixels'
-  resizePercentPreset: ResizePercentPreset
-  /** 选择「自定义」时的百分比字符串，1–400 */
-  resizeCustomPercentStr: string
-  /** 像素输入区是否展开 */
-  resizePixelsExpanded: boolean
-  width: string
-  height: string
-  keepAspectRatio: boolean
-  quality: number
-  outputDir: string
-  removeBackground: boolean
-  clearFixedWatermark: boolean
-  watermarkLeftPct: string
-  watermarkTopPct: string
-  watermarkWidthPct: string
-  watermarkHeightPct: string
-  /** 与中间预览一致的裁剪框（相对当前「视觉」宽高的 0–1 归一化，含旋转/镜像后） */
-  cropEnabled: boolean
-  cropNorm: { x: number; y: number; w: number; h: number }
-  /** 裁掉完全透明的边缘像素（用于减小导出尺寸） */
-  trimTransparent: boolean
-  /** 额外保留的透明边（像素） */
-  trimPaddingPx: string
-}
-
-const OUTPUT_FORMAT_VALUES: OutputFormatOption[] = ['original', 'png', 'jpeg', 'webp', 'avif']
-
-function isOutputFormatOption(v: string): v is OutputFormatOption {
-  return (OUTPUT_FORMAT_VALUES as readonly string[]).includes(v)
-}
+export type {
+  OutputFormatOption,
+  ProcessOptions,
+  ResizePercentPreset,
+} from '@/lib/imageProcessOptions'
 
 /** iOS 风格开关：必须为 ::after 设置 content，否则滑块不显示 */
 function PanelToggle({
