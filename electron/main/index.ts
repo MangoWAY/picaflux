@@ -25,6 +25,7 @@ import {
   processVideo,
   processVideoConcat,
   getVideoFileInfo,
+  getVideoThumbnailDataUrl,
   cancelVideoTask,
 } from './video-processor'
 import { getModel3dFileInfo, save3dThumbnailPng, processGlbConvert } from './gltf-3d-processor'
@@ -302,6 +303,13 @@ ipcMain.handle('video:getFileInfo', async (_, inputPath: string) => {
     return null
   }
   return await getVideoFileInfo(inputPath)
+})
+
+ipcMain.handle('video:getThumbnail', async (_, inputPath: string) => {
+  if (typeof inputPath !== 'string' || !inputPath) {
+    return { success: false, error: 'Invalid arguments' }
+  }
+  return await getVideoThumbnailDataUrl(inputPath)
 })
 
 ipcMain.handle('video:cancel', (_, taskId: string) => {

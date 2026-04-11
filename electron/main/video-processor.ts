@@ -1,9 +1,14 @@
 import ffmpeg from 'fluent-ffmpeg'
 import type { FfmpegCommand } from 'fluent-ffmpeg'
 import path from 'node:path'
+import os from 'node:os'
 import fs from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import type { WebContents } from 'electron'
-import { configureFfmpegStatic } from './ffmpeg-path'
+import { configureFfmpegStatic, getFfmpegPathsForRuntime } from './ffmpeg-path'
+
+const execFileAsync = promisify(execFile)
 import { sanitizeProcessVideoOptions, type SanitizedVideoOptions } from './video-options'
 
 configureFfmpegStatic(ffmpeg)
@@ -110,6 +115,78 @@ export async function getVideoFileInfo(inputPath: string): Promise<VideoFileInfo
       })
     })
   })
+}
+
+/** 抽取一帧生成预览图（PNG data URL），供素材条缩略图使用 */
+export async function getVideoThumbnailDataUrl(
+  inputPath: string,
+): Promise<{ success: boolean; dataUrl?: string; error?: string }> {
+  if (typeof inputPath !== 'string' || !inputPath.trim()) {
+    return { success: false, error: 'invalid path' }
+  }
+  const st = await fs.stat(inputPath).catch(() => null)
+  if (!st || !st.isFile()) {
+    return { success: false, error: 'not found' }
+  }
+
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'picaflux-vthumb-'))
+  const outPath = path.join(tmpDir, 'thumb.png')
+  const { ffmpeg: ffmpegPath } = getFfmpegPathsForRuntime()
+
+  const run = (args: string[]) =>
+    execFileAsync(ffmpegPath, args, {
+      windowsHide: true,
+      maxBuffer: 20 * 1024 * 1024,
+    })
+
+  try {
+    try {
+      await run([
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-y',
+        '-ss',
+        '0.5',
+        '-i',
+        inputPath,
+        '-frames:v',
+        '1',
+        '-vf',
+        'scale=200:-1',
+        '-q:v',
+        '5',
+        outPath,
+      ])
+    } catch {
+      await run([
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-y',
+        '-i',
+        inputPath,
+        '-frames:v',
+        '1',
+        '-vf',
+        'scale=200:-1',
+        '-q:v',
+        '5',
+        outPath,
+      ])
+    }
+
+    const buf = await fs.readFile(outPath)
+    return {
+      success: true,
+      dataUrl: `data:image/png;base64,${buf.toString('base64')}`,
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { success: false, error: msg }
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {})
+  }
 }
 
 function parsedBase(inputPath: string): { name: string; ext: string } {

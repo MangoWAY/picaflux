@@ -1,5 +1,5 @@
 import React, { useCallback, useLayoutEffect, useRef } from 'react'
-import { LayoutGrid, List, X, FileVideo } from 'lucide-react'
+import { LayoutGrid, List, X, FileVideo, GripVertical } from 'lucide-react'
 import clsx from 'clsx'
 
 export interface VideoFile {
@@ -17,6 +17,9 @@ export interface VideoFile {
   audioBitRateBps?: number
   status: 'pending' | 'processing' | 'done' | 'error'
   previewUrl?: string
+  /** 主进程生成的预览帧 data URL */
+  thumbnailDataUrl?: string
+  thumbnailError?: boolean
 }
 
 export type VideoStripListMode = 'thumbnail' | 'name'
@@ -32,6 +35,10 @@ interface VideoStripProps {
   previewPath: string | null
   onPreviewPath: (path: string) => void
   onRemoveVideo: (path: string) => void
+  /** 合并模式：调整列表顺序即调整拼接顺序 */
+  concatMode?: boolean
+  onReorder?: (fromIndex: number, toIndex: number) => void
+  reorderLocked?: boolean
 }
 
 function statusLabel(status: VideoFile['status']): string {
@@ -56,8 +63,13 @@ export function VideoStrip({
   previewPath,
   onPreviewPath,
   onRemoveVideo,
+  concatMode = false,
+  onReorder,
+  reorderLocked = false,
 }: VideoStripProps) {
   const selectAllRef = useRef<HTMLInputElement>(null)
+
+  const canReorder = Boolean(concatMode && onReorder && !reorderLocked)
 
   const allChecked = videos.length > 0 && videos.every((v) => checkedPaths.has(v.path))
   const someChecked = videos.some((v) => checkedPaths.has(v.path))
@@ -73,6 +85,36 @@ export function VideoStrip({
       else onClearSelection()
     },
     [onSelectAll, onClearSelection],
+  )
+
+  const handleDragStart = useCallback(
+    (e: React.DragEvent, index: number) => {
+      if (!canReorder) return
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', String(index))
+    },
+    [canReorder],
+  )
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!canReorder) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+    },
+    [canReorder],
+  )
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent, dropIndex: number) => {
+      e.preventDefault()
+      if (!canReorder || !onReorder) return
+      const raw = e.dataTransfer.getData('text/plain')
+      const from = parseInt(raw, 10)
+      if (!Number.isFinite(from) || from === dropIndex) return
+      onReorder(from, dropIndex)
+    },
+    [canReorder, onReorder],
   )
 
   return (
@@ -122,16 +164,28 @@ export function VideoStrip({
         </div>
       </div>
 
+      {concatMode ? (
+        <p className="shrink-0 border-b border-[#2d2d2d] px-3 py-1.5 text-[10px] leading-snug text-amber-500/90">
+          合并模式：列表顺序即为拼接顺序，可拖拽条目调整。
+        </p>
+      ) : null}
+
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {videos.length === 0 ? (
           <p className="px-1 pt-2 text-center text-xs text-gray-600">暂无视频</p>
         ) : listMode === 'thumbnail' ? (
           <ul className="flex flex-col gap-2">
-            {videos.map((v) => {
+            {videos.map((v, index) => {
               const isPreview = v.path === previewPath
               const isChecked = checkedPaths.has(v.path)
               return (
-                <li key={v.path}>
+                <li
+                  key={v.path}
+                  draggable={canReorder}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, index)}
+                >
                   <div
                     role="button"
                     tabIndex={0}
@@ -143,13 +197,23 @@ export function VideoStrip({
                       }
                     }}
                     className={clsx(
-                      'group relative cursor-pointer rounded-lg border p-2 transition-colors',
+                      'group relative rounded-lg border p-2 transition-colors',
+                      canReorder ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
                       isPreview
                         ? 'border-blue-500/60 bg-blue-500/10'
                         : 'border-[#2d2d2d] bg-[#1e1e1e] hover:border-[#3d3d3d]',
                     )}
                   >
                     <div className="flex gap-2">
+                      {canReorder ? (
+                        <span
+                          className="flex shrink-0 cursor-grab items-start pt-1 text-gray-600 active:cursor-grabbing"
+                          title="拖拽排序"
+                          aria-hidden
+                        >
+                          <GripVertical className="h-4 w-4" />
+                        </span>
+                      ) : null}
                       <label
                         className="flex shrink-0 cursor-pointer items-start pt-1"
                         onClick={(e) => e.stopPropagation()}
@@ -163,9 +227,18 @@ export function VideoStrip({
                       </label>
                       <div className="relative min-w-0 flex-1">
                         <div className="relative aspect-video overflow-hidden rounded-md bg-[#121212]">
-                          <div className="flex h-full items-center justify-center">
-                            <FileVideo className="h-10 w-10 text-gray-600" />
-                          </div>
+                          {v.thumbnailDataUrl ? (
+                            <img
+                              src={v.thumbnailDataUrl}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              draggable={false}
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center">
+                              <FileVideo className="h-10 w-10 text-gray-600" />
+                            </div>
+                          )}
                           {v.status !== 'pending' && (
                             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/50">
                               <span
@@ -210,11 +283,17 @@ export function VideoStrip({
           </ul>
         ) : (
           <ul className="flex flex-col gap-0.5">
-            {videos.map((v) => {
+            {videos.map((v, index) => {
               const isPreview = v.path === previewPath
               const isChecked = checkedPaths.has(v.path)
               return (
-                <li key={v.path}>
+                <li
+                  key={v.path}
+                  draggable={canReorder}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, index)}
+                >
                   <div
                     role="button"
                     tabIndex={0}
@@ -226,12 +305,18 @@ export function VideoStrip({
                       }
                     }}
                     className={clsx(
-                      'group flex cursor-pointer items-center gap-2 rounded-md border px-2 py-2 text-left text-sm transition-colors',
+                      'group flex items-center gap-2 rounded-md border px-2 py-2 text-left text-sm transition-colors',
+                      canReorder ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
                       isPreview
                         ? 'border-blue-500/60 bg-blue-500/10'
                         : 'border-transparent hover:bg-[#252525]',
                     )}
                   >
+                    {canReorder ? (
+                      <span className="shrink-0 text-gray-600" title="拖拽排序" aria-hidden>
+                        <GripVertical className="h-4 w-4" />
+                      </span>
+                    ) : null}
                     <label
                       className="flex shrink-0 cursor-pointer items-center"
                       onClick={(e) => e.stopPropagation()}
@@ -243,6 +328,16 @@ export function VideoStrip({
                         className="rounded border-[#3d3d3d] bg-[#121212] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
                       />
                     </label>
+                    {v.thumbnailDataUrl ? (
+                      <span className="relative h-8 w-12 shrink-0 overflow-hidden rounded bg-[#121212]">
+                        <img
+                          src={v.thumbnailDataUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          draggable={false}
+                        />
+                      </span>
+                    ) : null}
                     <span className="min-w-0 flex-1 truncate text-gray-200" title={v.name}>
                       {v.name}
                     </span>

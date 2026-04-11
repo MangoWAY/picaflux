@@ -59,6 +59,12 @@ contextBridge.exposeInMainWorld('picafluxAPI', {
       audioBitRateBps?: number
       size: number
     } | null>,
+  getVideoThumbnail: (filePath: string) =>
+    ipcRenderer.invoke('video:getThumbnail', filePath) as Promise<{
+      success: boolean
+      dataUrl?: string
+      error?: string
+    }>,
   cancelVideoTask: (taskId: string) =>
     ipcRenderer.invoke('video:cancel', taskId) as Promise<boolean>,
   subscribeVideoTaskProgress: (

@@ -65,6 +65,9 @@ export function VideoWorkbench() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [form, setForm] = useState<VideoProcessFormState>(defaultForm)
   const [progressPercent, setProgressPercent] = useState<number | null>(null)
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(
+    null,
+  )
 
   const activeTaskIdRef = useRef<string | null>(null)
 
@@ -97,6 +100,44 @@ export function VideoWorkbench() {
       if (taskId === activeTaskIdRef.current) {
         setProgressPercent(percent)
       }
+    })
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const needThumb = videos.filter((v) => !v.thumbnailDataUrl && !v.thumbnailError)
+    if (needThumb.length === 0) return
+    void (async () => {
+      for (const v of needThumb) {
+        if (cancelled) return
+        const r = await window.picafluxAPI.getVideoThumbnail(v.path)
+        if (cancelled) return
+        setVideos((prev) =>
+          prev.map((x) =>
+            x.path === v.path
+              ? {
+                  ...x,
+                  thumbnailDataUrl: r.success && r.dataUrl ? r.dataUrl : undefined,
+                  thumbnailError: !(r.success && r.dataUrl),
+                }
+              : x,
+          ),
+        )
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [videos])
+
+  const reorderVideos = useCallback((from: number, to: number) => {
+    if (from === to || from < 0 || to < 0) return
+    setVideos((prev) => {
+      if (from >= prev.length || to >= prev.length) return prev
+      const next = [...prev]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
     })
   }, [])
 
@@ -203,6 +244,7 @@ export function VideoWorkbench() {
       const taskId = newTaskId()
       activeTaskIdRef.current = taskId
       setProgressPercent(0)
+      setBatchProgress({ current: 1, total: 1 })
       try {
         const result = await window.picafluxAPI.processVideoConcat(
           taskId,
@@ -222,36 +264,43 @@ export function VideoWorkbench() {
       }
       setProgressPercent(null)
       activeTaskIdRef.current = null
+      setBatchProgress(null)
       setIsProcessing(false)
       return
     }
 
-    for (const v of batch) {
-      const taskId = newTaskId()
-      activeTaskIdRef.current = taskId
-      setProgressPercent(0)
-      try {
-        const result = await window.picafluxAPI.processVideo(
-          taskId,
-          v.path,
-          form.outputDir,
-          payloadBase,
-        )
-        setVideos((prev) =>
-          prev.map((p) =>
-            p.path === v.path ? { ...p, status: result.success ? 'done' : 'error' } : p,
-          ),
-        )
-      } catch {
-        setVideos((prev) =>
-          prev.map((p) => (p.path === v.path ? { ...p, status: 'error' as const } : p)),
-        )
+    setBatchProgress({ current: 0, total: batch.length })
+    try {
+      for (let i = 0; i < batch.length; i++) {
+        const v = batch[i]
+        setBatchProgress({ current: i + 1, total: batch.length })
+        const taskId = newTaskId()
+        activeTaskIdRef.current = taskId
+        setProgressPercent(0)
+        try {
+          const result = await window.picafluxAPI.processVideo(
+            taskId,
+            v.path,
+            form.outputDir,
+            payloadBase,
+          )
+          setVideos((prev) =>
+            prev.map((p) =>
+              p.path === v.path ? { ...p, status: result.success ? 'done' : 'error' } : p,
+            ),
+          )
+        } catch {
+          setVideos((prev) =>
+            prev.map((p) => (p.path === v.path ? { ...p, status: 'error' as const } : p)),
+          )
+        }
+        setProgressPercent(null)
+        activeTaskIdRef.current = null
       }
-      setProgressPercent(null)
-      activeTaskIdRef.current = null
+    } finally {
+      setBatchProgress(null)
+      setIsProcessing(false)
     }
-
-    setIsProcessing(false)
   }
 
   const previewVideo = previewPath ? (videos.find((x) => x.path === previewPath) ?? null) : null
@@ -270,6 +319,9 @@ export function VideoWorkbench() {
         previewPath={previewPath}
         onPreviewPath={setPreviewPath}
         onRemoveVideo={handleRemoveVideo}
+        concatMode={form.mode === 'concat'}
+        onReorder={reorderVideos}
+        reorderLocked={isProcessing}
       />
       <VideoPreviewPane
         videos={videos}
@@ -291,6 +343,7 @@ export function VideoWorkbench() {
         selectedForProcessCount={selectedCount}
         totalVideoCount={videos.length}
         progressPercent={progressPercent}
+        batchProgress={batchProgress}
       />
     </div>
   )

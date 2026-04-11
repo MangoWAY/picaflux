@@ -82,6 +82,11 @@ interface Window {
       audioBitRateBps?: number
       size: number
     } | null>
+    getVideoThumbnail: (filePath: string) => Promise<{
+      success: boolean
+      dataUrl?: string
+      error?: string
+    }>
     cancelVideoTask: (taskId: string) => Promise<boolean>
     subscribeVideoTaskProgress: (
       callback: (payload: { taskId: string; percent: number }) => void,

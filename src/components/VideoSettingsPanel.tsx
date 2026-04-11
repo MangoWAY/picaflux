@@ -66,6 +66,8 @@ interface VideoSettingsPanelProps {
   selectedForProcessCount: number
   totalVideoCount: number
   progressPercent: number | null
+  /** 多文件顺序处理时的当前序号；仅当 total 大于 1 时在界面展示 */
+  batchProgress: { current: number; total: number } | null
 }
 
 export function VideoSettingsPanel({
@@ -78,6 +80,7 @@ export function VideoSettingsPanel({
   selectedForProcessCount,
   totalVideoCount,
   progressPercent,
+  batchProgress,
 }: VideoSettingsPanelProps) {
   const update = <K extends keyof VideoProcessFormState>(
     key: K,
@@ -279,7 +282,7 @@ export function VideoSettingsPanel({
           <>
             <p className="text-xs leading-relaxed text-gray-500">
               按左侧列表<strong>从上到下</strong>的顺序拼接<strong>已勾选</strong>的片段（至少 2
-              个）。各段需<strong>均含音轨</strong>。
+              个）；可在左侧<strong>拖拽</strong>条目调整拼接顺序。各段需<strong>均含音轨</strong>。
             </p>
             <div>
               <label className="mb-2 block text-xs font-medium text-gray-400">预设</label>
@@ -511,6 +514,11 @@ export function VideoSettingsPanel({
               <span>进度</span>
               <span>{progressPercent}%</span>
             </div>
+            {batchProgress && batchProgress.total > 1 ? (
+              <p className="mb-1 text-[11px] text-gray-400">
+                正在处理第 {batchProgress.current} / {batchProgress.total} 个文件
+              </p>
+            ) : null}
             <div className="h-2 overflow-hidden rounded-full bg-[#2d2d2d]">
               <div
                 className="h-full bg-blue-600 transition-all duration-300"
