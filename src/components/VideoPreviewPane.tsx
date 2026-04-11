@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UploadCloud, FileVideo } from 'lucide-react'
 import type { VideoFile } from './VideoStrip'
 import type { VideoProcessFormState } from '@/lib/videoFormPayload'
@@ -109,6 +109,55 @@ export function VideoPreviewPane({
     return null
   }, [form.mode])
 
+  useEffect(() => {
+    if (!previewVideo) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      const elTarget = e.target as HTMLElement | null
+      if (elTarget?.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (elTarget?.closest('button') && e.code === 'Space') return
+      const el = videoRef.current
+      if (!el) return
+      if (e.code === 'Space') {
+        e.preventDefault()
+        if (el.paused) void el.play().catch(() => {})
+        else el.pause()
+        return
+      }
+      const step = 1
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        el.currentTime = Math.max(0, el.currentTime - step)
+        return
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        const d = el.duration
+        const next = el.currentTime + step
+        el.currentTime = Number.isFinite(d) && d > 0 ? Math.min(d, next) : next
+        return
+      }
+      const jump = 3
+      if (e.key === 'j' || e.key === 'J') {
+        e.preventDefault()
+        el.currentTime = Math.max(0, el.currentTime - jump)
+        return
+      }
+      if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault()
+        const d = el.duration
+        const next = el.currentTime + jump
+        el.currentTime = Number.isFinite(d) && d > 0 ? Math.min(d, next) : next
+        return
+      }
+      if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault()
+        el.pause()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [previewVideo])
+
   return (
     <div
       className="relative flex min-h-0 min-w-0 flex-1 flex-col border-r border-[#2d2d2d] bg-[#141414]"
@@ -126,6 +175,11 @@ export function VideoPreviewPane({
                 ? `${selectedCount} 项已选 · 共 ${videos.length} 个文件 · 时间与片段请在下方时间线调整`
                 : `${selectedCount} 项已选 · 共 ${videos.length} 个文件`}
           </p>
+          {previewVideo ? (
+            <p className="mt-0.5 text-[10px] text-gray-600">
+              Space 播放/暂停 · ←/→ ±1s · J／K／L 快退/暂停/快进
+            </p>
+          ) : null}
         </div>
         <button
           type="button"

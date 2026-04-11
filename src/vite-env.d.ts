@@ -88,6 +88,12 @@ interface Window {
       error?: string
     }>
     cancelVideoTask: (taskId: string) => Promise<boolean>
+    listVideoProcessPresets: () => Promise<import('./lib/videoPreset').VideoProcessPresetRecord[]>
+    saveVideoProcessPreset: (payload: {
+      name: string
+      options: unknown
+    }) => Promise<{ success: boolean; error?: string }>
+    deleteVideoProcessPreset: (id: string) => Promise<{ success: boolean; error?: string }>
     subscribeVideoTaskProgress: (
       callback: (payload: { taskId: string; percent: number }) => void,
     ) => () => void

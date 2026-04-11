@@ -59,6 +59,7 @@ export function VideoTimeline({
   const trackRef = useRef<HTMLDivElement>(null)
   const [metaDuration, setMetaDuration] = useState<number | null>(null)
   const [currentTime, setCurrentTime] = useState<number>(0)
+  const [hoverSec, setHoverSec] = useState<number | null>(null)
   const dragRef = useRef<{ kind: DragKind; pointerId: number } | null>(null)
 
   const dur = useMemo(() => {
@@ -240,61 +241,83 @@ export function VideoTimeline({
         )}
       </div>
 
-      <div
-        ref={trackRef}
-        className={clsx(
-          'relative h-10 w-full select-none rounded-md bg-[#1a1a1a]',
-          disabled ? 'opacity-60' : 'cursor-pointer',
-        )}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onPointerDown={(e) => {
-          if (disabled) return
-          const sec = pxToSec(e.clientX)
-          if (mode === 'extract_frame') updateTime(sec)
-          else setVideoTime(sec)
-        }}
-      >
-        {isTrim ? (
+      <div className="relative">
+        {hoverSec != null && dur > 0 ? (
           <div
-            className="absolute inset-y-0 rounded-md bg-blue-500/20"
-            style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
-          />
+            className="pointer-events-none absolute -top-7 z-20 -translate-x-1/2 whitespace-nowrap rounded bg-black/85 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-100 shadow"
+            style={{ left: `${(hoverSec / durSafe) * 100}%` }}
+          >
+            {formatClock(hoverSec)}
+          </div>
         ) : null}
-
         <div
+          ref={trackRef}
           className={clsx(
-            'absolute inset-y-1 w-[2px] rounded bg-white/70',
-            disabled ? '' : 'cursor-ew-resize',
+            'relative h-10 w-full select-none rounded-md bg-[#1a1a1a]',
+            disabled ? 'opacity-60' : 'cursor-pointer',
           )}
-          style={{ left: `${mode === 'extract_frame' ? timePct : playPct}%` }}
-          onPointerDown={(e) => onPointerDown(e, mode === 'extract_frame' ? 'time' : 'playhead')}
-          title={mode === 'extract_frame' ? '拖动选择截帧时间' : '拖动跳转播放位置'}
-        />
+          onMouseMove={(e) => {
+            if (disabled) return
+            setHoverSec(pxToSec(e.clientX))
+          }}
+          onMouseLeave={() => setHoverSec(null)}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onPointerDown={(e) => {
+            if (disabled) return
+            const sec = pxToSec(e.clientX)
+            if (mode === 'extract_frame') updateTime(sec)
+            else setVideoTime(sec)
+          }}
+        >
+          {[0, 0.25, 0.5, 0.75, 1].map((r, i) => (
+            <div
+              key={i}
+              className="pointer-events-none absolute bottom-0 top-0 w-px bg-white/12"
+              style={{ left: `${r * 100}%` }}
+            />
+          ))}
+          {isTrim ? (
+            <div
+              className="absolute inset-y-0 rounded-md bg-blue-500/20"
+              style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
+            />
+          ) : null}
 
-        {isTrim ? (
-          <>
-            <div
-              className={clsx(
-                'absolute inset-y-0 w-3 -translate-x-1/2 rounded-md bg-blue-500/70 shadow',
-                disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/80',
-              )}
-              style={{ left: `${startPct}%` }}
-              onPointerDown={(e) => onPointerDown(e, 'start')}
-              title="拖动起点"
-            />
-            <div
-              className={clsx(
-                'absolute inset-y-0 w-3 -translate-x-1/2 rounded-md bg-blue-500/70 shadow',
-                disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/80',
-              )}
-              style={{ left: `${endPct}%` }}
-              onPointerDown={(e) => onPointerDown(e, 'end')}
-              title="拖动终点"
-            />
-          </>
-        ) : null}
+          <div
+            className={clsx(
+              'absolute inset-y-1 w-[2px] rounded bg-white/70',
+              disabled ? '' : 'cursor-ew-resize',
+            )}
+            style={{ left: `${mode === 'extract_frame' ? timePct : playPct}%` }}
+            onPointerDown={(e) => onPointerDown(e, mode === 'extract_frame' ? 'time' : 'playhead')}
+            title={mode === 'extract_frame' ? '拖动选择截帧时间' : '拖动跳转播放位置'}
+          />
+
+          {isTrim ? (
+            <>
+              <div
+                className={clsx(
+                  'absolute inset-y-0 w-3 -translate-x-1/2 rounded-md bg-blue-500/70 shadow',
+                  disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/80',
+                )}
+                style={{ left: `${startPct}%` }}
+                onPointerDown={(e) => onPointerDown(e, 'start')}
+                title="拖动起点"
+              />
+              <div
+                className={clsx(
+                  'absolute inset-y-0 w-3 -translate-x-1/2 rounded-md bg-blue-500/70 shadow',
+                  disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/80',
+                )}
+                style={{ left: `${endPct}%` }}
+                onPointerDown={(e) => onPointerDown(e, 'end')}
+                title="拖动终点"
+              />
+            </>
+          ) : null}
+        </div>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">

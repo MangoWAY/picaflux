@@ -67,6 +67,20 @@ contextBridge.exposeInMainWorld('picafluxAPI', {
     }>,
   cancelVideoTask: (taskId: string) =>
     ipcRenderer.invoke('video:cancel', taskId) as Promise<boolean>,
+  listVideoProcessPresets: () =>
+    ipcRenderer.invoke('video:presets:list') as Promise<
+      import('../../src/lib/videoPreset').VideoProcessPresetRecord[]
+    >,
+  saveVideoProcessPreset: (payload: { name: string; options: unknown }) =>
+    ipcRenderer.invoke('video:presets:save', payload) as Promise<{
+      success: boolean
+      error?: string
+    }>,
+  deleteVideoProcessPreset: (id: string) =>
+    ipcRenderer.invoke('video:presets:delete', id) as Promise<{
+      success: boolean
+      error?: string
+    }>,
   subscribeVideoTaskProgress: (
     callback: (payload: { taskId: string; percent: number }) => void,
   ): (() => void) => {

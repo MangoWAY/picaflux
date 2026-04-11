@@ -1,5 +1,5 @@
 import React, { useCallback, useLayoutEffect, useRef } from 'react'
-import { LayoutGrid, List, X, FileVideo, GripVertical } from 'lucide-react'
+import { Copy, LayoutGrid, List, X, FileVideo, GripVertical } from 'lucide-react'
 import clsx from 'clsx'
 
 export interface VideoFile {
@@ -20,6 +20,8 @@ export interface VideoFile {
   /** 主进程生成的预览帧 data URL */
   thumbnailDataUrl?: string
   thumbnailError?: boolean
+  /** 最近一次处理失败时的简要原因 */
+  lastError?: string
 }
 
 export type VideoStripListMode = 'thumbnail' | 'name'
@@ -50,6 +52,14 @@ function formatDuration(sec?: number): string {
   const m = Math.floor(sec / 60)
   const s = Math.floor(sec % 60)
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+async function copyToClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    /* ignore */
+  }
 }
 
 export function VideoStrip({
@@ -263,6 +273,28 @@ export function VideoStrip({
                         <p className="text-center text-[10px] text-gray-600">
                           {formatDuration(v.durationSec)}
                         </p>
+                        {v.status === 'error' && v.lastError ? (
+                          <div className="mt-1 flex items-start gap-1">
+                            <p
+                              className="min-w-0 flex-1 text-left text-[10px] leading-snug text-red-400/95 line-clamp-4"
+                              title={v.lastError}
+                            >
+                              {v.lastError}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void copyToClipboard(v.lastError ?? '')
+                              }}
+                              className="shrink-0 rounded p-1 text-gray-500 hover:bg-white/10 hover:text-gray-200"
+                              title="复制错误信息"
+                              aria-label="复制错误信息"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                     <button
@@ -338,12 +370,29 @@ export function VideoStrip({
                         />
                       </span>
                     ) : null}
-                    <span className="min-w-0 flex-1 truncate text-gray-200" title={v.name}>
+                    <span
+                      className="min-w-0 flex-1 truncate text-gray-200"
+                      title={v.status === 'error' && v.lastError ? v.lastError : v.name}
+                    >
                       {v.name}
                     </span>
                     <span className="shrink-0 text-[10px] text-gray-500">
                       {formatDuration(v.durationSec)}
                     </span>
+                    {v.status === 'error' && v.lastError ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void copyToClipboard(v.lastError ?? '')
+                        }}
+                        className="shrink-0 rounded p-1 text-gray-500 hover:bg-white/10 hover:text-gray-200"
+                        title="复制错误信息"
+                        aria-label="复制错误信息"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
                     <span
                       className={clsx(
                         'shrink-0 text-[10px] font-medium uppercase',

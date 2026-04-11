@@ -38,6 +38,11 @@ import {
   saveImageProcessPreset,
   deleteImageProcessPreset,
 } from './image-process-presets'
+import {
+  listVideoProcessPresets,
+  saveVideoProcessPreset,
+  deleteVideoProcessPreset,
+} from './video-process-presets'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -261,6 +266,26 @@ ipcMain.handle('image:presets:delete', async (_, id: unknown) => {
     return { success: false, error: '参数无效' }
   }
   return await deleteImageProcessPreset(app.getPath('userData'), id)
+})
+
+ipcMain.handle('video:presets:list', async () => {
+  return await listVideoProcessPresets(app.getPath('userData'))
+})
+
+ipcMain.handle('video:presets:save', async (_, payload: unknown) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { success: false, error: '参数无效' }
+  }
+  const o = payload as Record<string, unknown>
+  const name = typeof o.name === 'string' ? o.name : ''
+  return await saveVideoProcessPreset(app.getPath('userData'), name, o.options)
+})
+
+ipcMain.handle('video:presets:delete', async (_, id: unknown) => {
+  if (typeof id !== 'string') {
+    return { success: false, error: '参数无效' }
+  }
+  return await deleteVideoProcessPreset(app.getPath('userData'), id)
 })
 
 const VIDEO_DIALOG_EXT = ['mp4', 'mov', 'mkv', 'webm', 'm4v', 'avi', 'mpeg', 'mpg'] as const

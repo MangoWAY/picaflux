@@ -3,6 +3,8 @@ import { VideoStrip, type VideoFile, type VideoStripListMode } from './VideoStri
 import { VideoPreviewPane } from './VideoPreviewPane'
 import { VideoSettingsPanel } from './VideoSettingsPanel'
 import { buildVideoProcessPayload, type VideoProcessFormState } from '@/lib/videoFormPayload'
+import type { VideoProcessPresetRecord } from '@/lib/videoPreset'
+import { mergeVideoPresetIntoForm, toVideoPresetPayload } from '@/lib/videoPreset'
 
 const VIDEO_EXT = /\.(mp4|mov|mkv|webm|m4v|avi|mpeg|mpg)$/i
 
@@ -68,6 +70,7 @@ export function VideoWorkbench() {
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(
     null,
   )
+  const [videoPresets, setVideoPresets] = useState<VideoProcessPresetRecord[]>([])
 
   const activeTaskIdRef = useRef<string | null>(null)
 
@@ -102,6 +105,49 @@ export function VideoWorkbench() {
       }
     })
   }, [])
+
+  const refreshVideoPresets = useCallback(async () => {
+    try {
+      const list = await window.picafluxAPI.listVideoProcessPresets()
+      setVideoPresets(list)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshVideoPresets()
+  }, [refreshVideoPresets])
+
+  const handleApplyVideoPreset = useCallback(
+    (id: string) => {
+      const rec = videoPresets.find((p) => p.id === id)
+      if (!rec) return
+      setForm((prev) => mergeVideoPresetIntoForm(rec.options, prev))
+    },
+    [videoPresets],
+  )
+
+  const handleSaveVideoPreset = useCallback(
+    async (name: string) => {
+      const r = await window.picafluxAPI.saveVideoProcessPreset({
+        name,
+        options: toVideoPresetPayload(form),
+      })
+      if (r.success) await refreshVideoPresets()
+      return r
+    },
+    [form, refreshVideoPresets],
+  )
+
+  const handleDeleteVideoPreset = useCallback(
+    async (id: string) => {
+      const r = await window.picafluxAPI.deleteVideoProcessPreset(id)
+      if (r.success) await refreshVideoPresets()
+      return r
+    },
+    [refreshVideoPresets],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -229,7 +275,11 @@ export function VideoWorkbench() {
 
     setIsProcessing(true)
     setVideos((prev) =>
-      prev.map((v) => (checkedPaths.has(v.path) ? { ...v, status: 'processing' as const } : v)),
+      prev.map((v) =>
+        checkedPaths.has(v.path)
+          ? { ...v, status: 'processing' as const, lastError: undefined }
+          : v,
+      ),
     )
 
     const payloadBase = buildVideoProcessPayload(form)
@@ -254,12 +304,22 @@ export function VideoWorkbench() {
         )
         setVideos((prev) =>
           prev.map((p) =>
-            checkedPaths.has(p.path) ? { ...p, status: result.success ? 'done' : 'error' } : p,
+            checkedPaths.has(p.path)
+              ? {
+                  ...p,
+                  status: result.success ? 'done' : 'error',
+                  lastError: result.success ? undefined : (result.error ?? '合并失败'),
+                }
+              : p,
           ),
         )
       } catch {
         setVideos((prev) =>
-          prev.map((p) => (checkedPaths.has(p.path) ? { ...p, status: 'error' as const } : p)),
+          prev.map((p) =>
+            checkedPaths.has(p.path)
+              ? { ...p, status: 'error' as const, lastError: '合并失败' }
+              : p,
+          ),
         )
       }
       setProgressPercent(null)
@@ -286,12 +346,20 @@ export function VideoWorkbench() {
           )
           setVideos((prev) =>
             prev.map((p) =>
-              p.path === v.path ? { ...p, status: result.success ? 'done' : 'error' } : p,
+              p.path === v.path
+                ? {
+                    ...p,
+                    status: result.success ? 'done' : 'error',
+                    lastError: result.success ? undefined : (result.error ?? '处理失败'),
+                  }
+                : p,
             ),
           )
         } catch {
           setVideos((prev) =>
-            prev.map((p) => (p.path === v.path ? { ...p, status: 'error' as const } : p)),
+            prev.map((p) =>
+              p.path === v.path ? { ...p, status: 'error' as const, lastError: '处理失败' } : p,
+            ),
           )
         }
         setProgressPercent(null)
@@ -344,6 +412,10 @@ export function VideoWorkbench() {
         totalVideoCount={videos.length}
         progressPercent={progressPercent}
         batchProgress={batchProgress}
+        videoPresets={videoPresets}
+        onApplyVideoPreset={handleApplyVideoPreset}
+        onSaveVideoPreset={handleSaveVideoPreset}
+        onDeleteVideoPreset={handleDeleteVideoPreset}
       />
     </div>
   )
