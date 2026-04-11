@@ -3,17 +3,58 @@ import clsx from 'clsx'
 import { FolderOpen, Play, Square } from 'lucide-react'
 import type { VideoProcessFormState, VideoWorkbenchMode } from '@/lib/videoFormPayload'
 
-const MODE_OPTIONS: { id: VideoWorkbenchMode; label: string }[] = [
-  { id: 'transcode', label: '转码 / 压缩' },
-  { id: 'trim', label: '裁剪片段' },
-  { id: 'speed', label: '变速' },
-  { id: 'extract_frame', label: '截帧' },
-  { id: 'audio_extract', label: '抽取音频' },
-  { id: 'strip_audio', label: '去除音轨' },
-  { id: 'gif', label: '导出 GIF' },
-  { id: 'webp_anim', label: '导出 WebP（动图）' },
-  { id: 'concat', label: '合并片段' },
+const MODE_GROUPS: {
+  id: 'encode' | 'time' | 'audio' | 'merge'
+  label: string
+  modes: { id: VideoWorkbenchMode; label: string }[]
+}[] = [
+  {
+    id: 'encode',
+    label: '编码与封装',
+    modes: [
+      { id: 'transcode', label: '转码 / 压缩' },
+      { id: 'speed', label: '变速' },
+    ],
+  },
+  {
+    id: 'time',
+    label: '时间与导出',
+    modes: [
+      { id: 'trim', label: '裁剪片段' },
+      { id: 'extract_frame', label: '截帧' },
+      { id: 'gif', label: '导出 GIF' },
+      { id: 'webp_anim', label: '导出 WebP（动图）' },
+    ],
+  },
+  {
+    id: 'audio',
+    label: '音轨',
+    modes: [
+      { id: 'audio_extract', label: '抽取音频' },
+      { id: 'strip_audio', label: '去除音轨' },
+    ],
+  },
+  {
+    id: 'merge',
+    label: '合并',
+    modes: [{ id: 'concat', label: '合并片段' }],
+  },
 ]
+
+function parseSecForDisplay(s: string): number {
+  const n = parseFloat(String(s).trim().replace(',', '.'))
+  if (!Number.isFinite(n) || n < 0) return NaN
+  return n
+}
+
+function formatDisplayClock(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return '—'
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  const ms = Math.floor((sec % 1) * 1000)
+  if (ms > 0) return `${m}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`
+  return `${m}:${String(s).padStart(2, '0')}`
+}
 
 interface VideoSettingsPanelProps {
   state: VideoProcessFormState
@@ -45,34 +86,105 @@ export function VideoSettingsPanel({
     onChange({ ...state, [key]: value })
   }
 
+  const activeGroup =
+    MODE_GROUPS.find((g) => g.modes.some((m) => m.id === state.mode)) ?? MODE_GROUPS[0]
+
+  const selectGroup = (groupId: (typeof MODE_GROUPS)[number]['id']) => {
+    const g = MODE_GROUPS.find((x) => x.id === groupId)
+    if (!g) return
+    if (g.modes.some((m) => m.id === state.mode)) return
+    onChange({ ...state, mode: g.modes[0].id })
+  }
+
+  const selectMode = (mode: VideoWorkbenchMode) => {
+    if (mode === state.mode || isProcessing) return
+    onChange({ ...state, mode })
+  }
+
   const canStart =
     selectedForProcessCount > 0 &&
     Boolean(state.outputDir.trim()) &&
     (state.mode !== 'concat' || selectedForProcessCount >= 2)
 
+  const trimLikeSummary =
+    state.mode === 'trim' || state.mode === 'gif' || state.mode === 'webp_anim'
+  const startSec = parseSecForDisplay(state.startSecStr)
+  const clipDurSec = parseSecForDisplay(state.durationSecStr)
+  const endSec =
+    Number.isFinite(startSec) && Number.isFinite(clipDurSec) ? startSec + clipDurSec : NaN
+  const extractTimeSec = parseSecForDisplay(state.timeSecStr)
+
   return (
     <div className="flex h-full w-[320px] shrink-0 flex-col border-l border-[#2d2d2d] bg-[#1a1a1a]">
       <div className="border-b border-[#2d2d2d] px-4 py-3">
         <h2 className="text-sm font-semibold text-white">视频处理</h2>
-        <p className="text-xs text-gray-500">与图片模块相同：勾选 → 参数 → 输出目录</p>
+        <p className="text-xs text-gray-500">勾选素材 → 选择处理方式 → 参数与输出目录</p>
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         <div>
-          <label className="mb-2 block text-xs font-medium text-gray-400">处理类型</label>
-          <select
-            value={state.mode}
-            onChange={(e) => update('mode', e.target.value as VideoWorkbenchMode)}
-            disabled={isProcessing}
-            className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            {MODE_OPTIONS.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
+          <span className="mb-2 block text-xs font-medium text-gray-400">处理类型</span>
+          <div className="flex flex-wrap gap-1 border-b border-[#2d2d2d] pb-2" role="tablist">
+            {MODE_GROUPS.map((g) => {
+              const inGroup = g.modes.some((m) => m.id === state.mode)
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={inGroup}
+                  disabled={isProcessing}
+                  onClick={() => selectGroup(g.id)}
+                  className={clsx(
+                    'rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors',
+                    inGroup
+                      ? 'bg-blue-500/15 text-blue-300'
+                      : 'text-gray-500 hover:bg-[#252525] hover:text-gray-300',
+                  )}
+                >
+                  {g.label}
+                </button>
+              )
+            })}
+          </div>
+          <div className="mt-2 flex flex-col gap-1.5">
+            {activeGroup.modes.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => selectMode(m.id)}
+                disabled={isProcessing}
+                className={clsx(
+                  'rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                  m.id === state.mode
+                    ? 'border-blue-500/50 bg-blue-500/10 text-white'
+                    : 'border-[#2d2d2d] bg-[#121212] text-gray-300 hover:border-[#3d3d3d]',
+                )}
+              >
+                {m.label}
+              </button>
             ))}
-          </select>
+          </div>
         </div>
+
+        {trimLikeSummary ? (
+          <div className="rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-xs">
+            <p className="mb-1 font-medium text-gray-500">片段范围（在中间预览区时间线调整）</p>
+            <p className="text-gray-300">
+              起点 {formatDisplayClock(startSec)} · 终点 {formatDisplayClock(endSec)} · 时长{' '}
+              {Number.isFinite(clipDurSec)
+                ? `${clipDurSec.toFixed(3).replace(/\.?0+$/, '')} s`
+                : '—'}
+            </p>
+          </div>
+        ) : null}
+
+        {state.mode === 'extract_frame' ? (
+          <div className="rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-xs">
+            <p className="mb-1 font-medium text-gray-500">截取时刻（在中间预览区时间线调整）</p>
+            <p className="text-gray-300">{formatDisplayClock(extractTimeSec)}</p>
+          </div>
+        ) : null}
 
         {state.mode === 'transcode' ? (
           <>
@@ -203,33 +315,6 @@ export function VideoSettingsPanel({
           </>
         ) : null}
 
-        {state.mode === 'trim' || state.mode === 'gif' || state.mode === 'webp_anim' ? (
-          <>
-            <div>
-              <label className="mb-2 block text-xs font-medium text-gray-400">起始时间（秒）</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={state.startSecStr}
-                onChange={(e) => update('startSecStr', e.target.value)}
-                disabled={isProcessing}
-                className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-xs font-medium text-gray-400">时长（秒）</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={state.durationSecStr}
-                onChange={(e) => update('durationSecStr', e.target.value)}
-                disabled={isProcessing}
-                className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
-              />
-            </div>
-          </>
-        ) : null}
-
         {state.mode === 'gif' || state.mode === 'webp_anim' ? (
           <>
             <div>
@@ -277,17 +362,6 @@ export function VideoSettingsPanel({
 
         {state.mode === 'extract_frame' ? (
           <>
-            <div>
-              <label className="mb-2 block text-xs font-medium text-gray-400">截取时刻（秒）</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={state.timeSecStr}
-                onChange={(e) => update('timeSecStr', e.target.value)}
-                disabled={isProcessing}
-                className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
-              />
-            </div>
             <div>
               <label className="mb-2 block text-xs font-medium text-gray-400">
                 间隔序列（秒，0=仅单帧）
@@ -444,6 +518,18 @@ export function VideoSettingsPanel({
               />
             </div>
           </div>
+        ) : null}
+
+        {!canStart && !isProcessing ? (
+          <p className="text-xs text-amber-500/90">
+            {selectedForProcessCount === 0
+              ? '请至少勾选一个视频。'
+              : !state.outputDir.trim()
+                ? '请选择输出目录。'
+                : state.mode === 'concat' && selectedForProcessCount < 2
+                  ? '合并至少需要勾选 2 个视频。'
+                  : ''}
+          </p>
         ) : null}
       </div>
 

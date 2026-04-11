@@ -122,7 +122,9 @@ export function VideoPreviewPane({
           <p className="truncate text-xs text-gray-500">
             {videos.length === 0
               ? '拖入视频或点击添加'
-              : `${selectedCount} 项已选 · 共 ${videos.length} 个文件`}
+              : showTimeline
+                ? `${selectedCount} 项已选 · 共 ${videos.length} 个文件 · 时间与片段请在下方时间线调整`
+                : `${selectedCount} 项已选 · 共 ${videos.length} 个文件`}
           </p>
         </div>
         <button
