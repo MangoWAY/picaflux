@@ -52,8 +52,10 @@ export function ImageWorkbench({
     null,
   )
   const [imagePresets, setImagePresets] = useState<ImageProcessPresetRecord[]>([])
+  const [cropVisualPx, setCropVisualPx] = useState<{ w: number; h: number } | null>(null)
   const [options, setOptions] = useState<ProcessOptions>({
     format: 'png',
+    rotateMirrorEnabled: false,
     rotateQuarterTurns: 0,
     flipHorizontal: false,
     flipVertical: false,
@@ -329,9 +331,9 @@ export function ImageWorkbench({
         selectedCount={selectedCount}
         onAddImages={handleAddImages}
         onDropPaths={handleDropPaths}
-        rotateQuarterTurns={options.rotateQuarterTurns}
-        flipHorizontal={options.flipHorizontal}
-        flipVertical={options.flipVertical}
+        rotateQuarterTurns={options.rotateMirrorEnabled === false ? 0 : options.rotateQuarterTurns}
+        flipHorizontal={options.rotateMirrorEnabled !== false && options.flipHorizontal}
+        flipVertical={options.rotateMirrorEnabled !== false && options.flipVertical}
         fixedWatermarkRegionPercent={fixedWatermarkRegionForPreview}
         sliceEnabled={options.sliceEnabled}
         sliceXLines={options.sliceXLines}
@@ -342,11 +344,15 @@ export function ImageWorkbench({
         cropEnabled={options.cropEnabled}
         cropNorm={options.cropNorm}
         onCropNormChange={(rect) => setOptions((prev) => ({ ...prev, cropNorm: rect }))}
+        onCropVisualSizeChange={setCropVisualPx}
+        trimTransparent={options.trimTransparent}
+        trimPaddingPx={options.trimPaddingPx}
         onNavigatePreview={handleNavigatePreview}
       />
       <SettingsPanel
         options={options}
         onChange={setOptions}
+        cropVisualPx={cropVisualPx}
         onSelectOutputDir={handleSelectOutputDir}
         onStartProcessing={handleStartProcessing}
         isProcessing={isProcessing}

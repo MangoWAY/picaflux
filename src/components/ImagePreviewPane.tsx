@@ -3,6 +3,13 @@ import clsx from 'clsx'
 import { UploadCloud, FileImage, Hand } from 'lucide-react'
 import type { ImageFile } from './ImageStrip'
 import type { WatermarkRegionPercents } from '@/lib/imageProcessPayload'
+import { clampCropNorm } from '@/lib/cropNorm'
+import { MIN_CROP_NORM } from '@/lib/imageProcessOptions'
+import {
+  computeTrimNormRect,
+  imageDataHasNonOpaqueAlpha,
+  renderVisualImageData,
+} from '@/lib/trimPreview'
 
 /** 阻止 range input 上的 wheel 事件改变滑块值 */
 function usePreventWheelOnRef(ref: React.RefObject<HTMLInputElement | null>) {
@@ -16,6 +23,10 @@ function usePreventWheelOnRef(ref: React.RefObject<HTMLInputElement | null>) {
 }
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|avif)$/i
+
+/** 预览棋盘格背景固定配色（不提供自定义，避免占空间） */
+const PREVIEW_CHECKER_LIGHT = '#cfcfcf'
+const PREVIEW_CHECKER_DARK = '#9b9b9b'
 
 /** 与导出时 fixedWatermarkRegion 百分比语义一致（相对原图宽高） */
 export type FixedWatermarkRegionPercent = WatermarkRegionPercents
@@ -55,11 +66,14 @@ interface ImagePreviewPaneProps {
   cropEnabled?: boolean
   cropNorm?: { x: number; y: number; w: number; h: number }
   onCropNormChange?: (rect: { x: number; y: number; w: number; h: number }) => void
+  /** 当前预览「视觉」尺寸（与裁剪归一化一致），供右侧像素输入同步 */
+  onCropVisualSizeChange?: (size: { w: number; h: number } | null) => void
+  /** 裁切透明边：在预览中框出保留区域（与导出管线顺序一致：先裁剪再 trim） */
+  trimTransparent?: boolean
+  trimPaddingPx?: string
   /** 在预览区用 ← / → 切换列表中的上一张 / 下一张（与左侧顺序一致） */
   onNavigatePreview?: (delta: -1 | 1) => void
 }
-
-const MIN_CROP_FRAC = 0.02
 
 type CropDragHandle = 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se'
 
@@ -70,33 +84,13 @@ interface CropDragState {
   start: { x: number; y: number; w: number; h: number }
 }
 
-function clampCropNorm(
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  min = MIN_CROP_FRAC,
-): { x: number; y: number; w: number; h: number } {
-  let cx = x
-  let cy = y
-  let cw = Math.max(min, w)
-  let ch = Math.max(min, h)
-  if (cw > 1) cw = 1
-  if (ch > 1) ch = 1
-  cx = Math.max(0, Math.min(1 - cw, cx))
-  cy = Math.max(0, Math.min(1 - ch, cy))
-  cw = Math.max(min, Math.min(cw, 1 - cx))
-  ch = Math.max(min, Math.min(ch, 1 - cy))
-  return { x: cx, y: cy, w: cw, h: ch }
-}
-
 function computeCropFromDrag(
   d: CropDragState,
   nx: number,
   ny: number,
 ): { x: number; y: number; w: number; h: number } {
   const r = d.start
-  const min = MIN_CROP_FRAC
+  const min = MIN_CROP_NORM
 
   switch (d.handle) {
     case 'move':
@@ -169,6 +163,9 @@ export function ImagePreviewPane({
   cropEnabled = false,
   cropNorm = { x: 0, y: 0, w: 1, h: 1 },
   onCropNormChange,
+  onCropVisualSizeChange,
+  trimTransparent = false,
+  trimPaddingPx = '2',
   onNavigatePreview,
 }: ImagePreviewPaneProps) {
   const collectPathsFromDataTransfer = useCallback((dt: DataTransfer): string[] => {
@@ -231,9 +228,7 @@ export function ImagePreviewPane({
   const previewSrc = previewImage?.previewUrl
 
   const [previewBgMode, setPreviewBgMode] = useState<'checker' | 'solid'>('checker')
-  const [checkerLight, setCheckerLight] = useState('#cfcfcf')
-  const [checkerDark, setCheckerDark] = useState('#9b9b9b')
-  const [solidBg, setSolidBg] = useState('#1a1a1a')
+  const [solidBg, setSolidBg] = useState('#ffffff')
 
   const [showAlpha, setShowAlpha] = useState(false)
   const [alphaDataUrl, setAlphaDataUrl] = useState<string | null>(null)
@@ -339,12 +334,12 @@ export function ImagePreviewPane({
   }, [showAlpha, previewImage?.path])
 
   const checkerStyle: React.CSSProperties = {
-    backgroundColor: checkerLight,
+    backgroundColor: PREVIEW_CHECKER_LIGHT,
     backgroundImage: [
-      `linear-gradient(45deg, ${checkerDark} 25%, transparent 25%)`,
-      `linear-gradient(-45deg, ${checkerDark} 25%, transparent 25%)`,
-      `linear-gradient(45deg, transparent 75%, ${checkerDark} 75%)`,
-      `linear-gradient(-45deg, transparent 75%, ${checkerDark} 75%)`,
+      `linear-gradient(45deg, ${PREVIEW_CHECKER_DARK} 25%, transparent 25%)`,
+      `linear-gradient(-45deg, ${PREVIEW_CHECKER_DARK} 25%, transparent 25%)`,
+      `linear-gradient(45deg, transparent 75%, ${PREVIEW_CHECKER_DARK} 75%)`,
+      `linear-gradient(-45deg, transparent 75%, ${PREVIEW_CHECKER_DARK} 75%)`,
     ].join(', '),
     backgroundSize: '24px 24px',
     backgroundPosition: '0 0, 0 12px, 12px -12px, -12px 0px',
@@ -374,11 +369,6 @@ export function ImagePreviewPane({
     setPan({ x: 0, y: 0 })
   }, [])
 
-  const setOneToOne = useCallback(() => {
-    applyViewPercent(100)
-    setPan({ x: 0, y: 0 })
-  }, [applyViewPercent])
-
   const canPan = useMemo(() => {
     if (!imgLayout || viewScale <= 0 || nw <= 0 || nh <= 0) return false
     const bw = nw * viewScale
@@ -399,6 +389,66 @@ export function ImagePreviewPane({
     () => (cropEnabled ? cropNorm : { x: 0, y: 0, w: 1, h: 1 }),
     [cropEnabled, cropNorm],
   )
+
+  useEffect(() => {
+    onCropVisualSizeChange?.(visualW > 0 && visualH > 0 ? { w: visualW, h: visualH } : null)
+  }, [visualW, visualH, onCropVisualSizeChange])
+
+  const [trimOverlayNorm, setTrimOverlayNorm] = useState<{
+    x: number
+    y: number
+    w: number
+    h: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!trimTransparent || !previewSrc) {
+      setTrimOverlayNorm(null)
+      return
+    }
+    const img = imgRef.current
+    if (!img || !img.complete || img.naturalWidth === 0 || visualW <= 0 || visualH <= 0) {
+      setTrimOverlayNorm(null)
+      return
+    }
+    let cancelled = false
+    const id = requestAnimationFrame(() => {
+      const imageData = renderVisualImageData(
+        img,
+        visualW,
+        visualH,
+        rotateQuarterTurns,
+        flipHorizontal,
+        flipVertical,
+      )
+      if (cancelled || !imageData) {
+        setTrimOverlayNorm(null)
+        return
+      }
+      if (!imageDataHasNonOpaqueAlpha(imageData)) {
+        setTrimOverlayNorm(null)
+        return
+      }
+      const p = parseInt(trimPaddingPx, 10)
+      const pad = Number.isFinite(p) ? Math.max(0, p) : 2
+      const rect = computeTrimNormRect(imageData, effectiveCrop, pad)
+      if (!cancelled) setTrimOverlayNorm(rect)
+    })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(id)
+    }
+  }, [
+    trimTransparent,
+    trimPaddingPx,
+    previewSrc,
+    visualW,
+    visualH,
+    rotateQuarterTurns,
+    flipHorizontal,
+    flipVertical,
+    effectiveCrop,
+  ])
 
   const clientToNorm = useCallback(
     (clientX: number, clientY: number) => {
@@ -618,12 +668,12 @@ export function ImagePreviewPane({
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-white">图片预览</h1>
           {images.length > 0 && (
-            <>
-              <p className="truncate text-xs text-gray-500">
-                已选 {selectedCount} / {images.length} 张将使用右侧参数处理
-              </p>
-              <p className="mt-0.5 text-[10px] text-gray-600">← → 切换预览图片</p>
-            </>
+            <p
+              className="truncate text-xs text-gray-500"
+              title="将使用右侧参数处理；键盘 ← → 切换预览"
+            >
+              已选 {selectedCount}/{images.length} 张 · ←→ 切换预览
+            </p>
           )}
         </div>
         <button
@@ -642,9 +692,8 @@ export function ImagePreviewPane({
             onDragOver={handleDragOver}
             onDrop={handleDrop}
           >
-            <UploadCloud className="mb-4 h-12 w-12 text-gray-600" />
-            <p className="mb-1 text-lg font-medium text-gray-300">拖放图片到此处</p>
-            <p className="text-sm">或点击右上角「添加图片」</p>
+            <UploadCloud className="mb-3 h-10 w-10 text-gray-600" />
+            <p className="text-sm text-gray-400">拖入图片或点击添加</p>
           </div>
         ) : previewImage ? (
           <div className="flex h-full min-h-0 flex-col gap-3">
@@ -751,6 +800,22 @@ export function ImagePreviewPane({
                         ))}
                       </div>
                     )}
+                    {trimTransparent && trimOverlayNorm ? (
+                      <div
+                        className="pointer-events-none absolute z-[22] box-border border-2 border-dashed border-emerald-400/95 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+                        style={{
+                          left: `${trimOverlayNorm.x * 100}%`,
+                          top: `${trimOverlayNorm.y * 100}%`,
+                          width: `${trimOverlayNorm.w * 100}%`,
+                          height: `${trimOverlayNorm.h * 100}%`,
+                        }}
+                        title="裁切透明边后保留的区域（含边距）"
+                      >
+                        <span className="absolute left-0 top-0 whitespace-nowrap rounded-br bg-black/70 px-1 py-0.5 text-[10px] font-medium text-emerald-100">
+                          透明边裁切后
+                        </span>
+                      </div>
+                    ) : null}
                     {cropEnabled && onCropNormChange ? (
                       <div className="absolute inset-0 z-[25] pointer-events-none select-none">
                         <div
@@ -874,30 +939,19 @@ export function ImagePreviewPane({
                 )}
               </div>
             </div>
-            <div className="shrink-0 flex flex-col gap-3 rounded-xl border border-[#2d2d2d] bg-[#181818] p-3">
+            <div className="shrink-0 rounded-xl border border-[#2d2d2d] bg-[#181818] p-2.5">
               {previewSrc ? (
-                <div className="flex items-center justify-between gap-4 text-xs text-gray-400">
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={setFit}
-                      className="rounded px-2 py-1 text-gray-300 hover:bg-[#2d2d2d] transition-colors"
-                      title="适配窗口"
-                    >
-                      适配
-                    </button>
-                    <button
-                      type="button"
-                      onClick={setOneToOne}
-                      className="rounded px-2 py-1 text-gray-300 hover:bg-[#2d2d2d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="100%（1:1 像素）"
-                      disabled={!imgLayout?.scale}
-                    >
-                      100%
-                    </button>
-                  </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-gray-400">
+                  <button
+                    type="button"
+                    onClick={setFit}
+                    className="shrink-0 rounded px-2 py-0.5 text-gray-300 transition-colors hover:bg-[#2d2d2d]"
+                    title="适配窗口（重置缩放与平移）"
+                  >
+                    适配
+                  </button>
 
-                  <div className="flex items-center gap-3 flex-1 max-w-[240px]">
+                  <div className="flex min-w-[140px] max-w-[min(100%,280px)] flex-1 items-center gap-2">
                     <input
                       ref={zoomSliderRef}
                       type="range"
@@ -909,7 +963,7 @@ export function ImagePreviewPane({
                       onChange={(e) => applyViewPercent(parseInt(e.target.value, 10))}
                       className="min-w-0 flex-1 accent-blue-500"
                     />
-                    <div className="flex items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-0.5">
                       <input
                         type="text"
                         inputMode="numeric"
@@ -924,7 +978,7 @@ export function ImagePreviewPane({
                             commitZoomPercentInput()
                           }
                         }}
-                        className="w-10 shrink-0 rounded border border-[#3d3d3d] bg-[#121212] px-1 py-0.5 text-center text-[11px] text-gray-100 tabular-nums focus:border-blue-500 focus:outline-none"
+                        className="w-9 shrink-0 rounded border border-[#3d3d3d] bg-[#121212] px-1 py-0.5 text-center text-[11px] text-gray-100 tabular-nums focus:border-blue-500 focus:outline-none"
                         title="25–400，回车确认"
                         aria-label="缩放百分比"
                       />
@@ -932,79 +986,53 @@ export function ImagePreviewPane({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end w-[80px]">
-                    {canPan ? (
-                      <div className="flex items-center gap-1 text-[10px] text-gray-500">
-                        <Hand className="h-3 w-3" />
-                        <span>可拖动</span>
-                      </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <label className="flex items-center gap-1.5">
+                      <span className="text-gray-500">背景</span>
+                      <select
+                        value={previewBgMode}
+                        onChange={(e) => setPreviewBgMode(e.target.value as 'checker' | 'solid')}
+                        className="rounded border border-[#3d3d3d] bg-[#121212] px-1.5 py-0.5 text-[11px] text-gray-200 focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="checker">棋盘格</option>
+                        <option value="solid">纯色</option>
+                      </select>
+                    </label>
+                    {previewBgMode === 'solid' ? (
+                      <label className="flex items-center gap-1.5">
+                        <span className="text-gray-500">颜色</span>
+                        <input
+                          type="color"
+                          value={solidBg}
+                          onChange={(e) => setSolidBg(e.target.value)}
+                          className="h-5 w-7 cursor-pointer rounded border border-[#3d3d3d] bg-[#121212] p-0"
+                          aria-label="背景纯色"
+                        />
+                      </label>
                     ) : null}
                   </div>
+
+                  <label
+                    className="flex cursor-pointer items-center gap-1.5 shrink-0"
+                    title="显示 Alpha 通道"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showAlpha}
+                      onChange={(e) => setShowAlpha(e.target.checked)}
+                      className="rounded border-[#3d3d3d] bg-[#121212] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                    />
+                    <span className="text-gray-300">显示 Alpha</span>
+                  </label>
+
+                  {canPan ? (
+                    <div className="flex shrink-0 items-center gap-1 text-[10px] text-gray-500">
+                      <Hand className="h-3 w-3" aria-hidden />
+                      <span>可拖动</span>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
-
-              {previewSrc && <div className="h-px w-full bg-[#2d2d2d]" />}
-
-              <div className="flex items-center justify-between text-xs text-gray-400">
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2">
-                    <span className="text-gray-500">背景</span>
-                    <select
-                      value={previewBgMode}
-                      onChange={(e) => setPreviewBgMode(e.target.value as 'checker' | 'solid')}
-                      className="rounded border border-[#3d3d3d] bg-[#121212] px-2 py-1 text-xs text-gray-200 focus:border-blue-500 focus:outline-none"
-                    >
-                      <option value="checker">棋盘格</option>
-                      <option value="solid">纯色</option>
-                    </select>
-                  </label>
-                  {previewBgMode === 'checker' ? (
-                    <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-2">
-                        <span className="text-gray-500">浅</span>
-                        <input
-                          type="color"
-                          value={checkerLight}
-                          onChange={(e) => setCheckerLight(e.target.value)}
-                          className="h-6 w-8 cursor-pointer rounded border border-[#3d3d3d] bg-[#121212] p-0"
-                          aria-label="棋盘格浅色"
-                        />
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <span className="text-gray-500">深</span>
-                        <input
-                          type="color"
-                          value={checkerDark}
-                          onChange={(e) => setCheckerDark(e.target.value)}
-                          className="h-6 w-8 cursor-pointer rounded border border-[#3d3d3d] bg-[#121212] p-0"
-                          aria-label="棋盘格深色"
-                        />
-                      </label>
-                    </div>
-                  ) : (
-                    <label className="flex items-center gap-2">
-                      <span className="text-gray-500">颜色</span>
-                      <input
-                        type="color"
-                        value={solidBg}
-                        onChange={(e) => setSolidBg(e.target.value)}
-                        className="h-6 w-8 cursor-pointer rounded border border-[#3d3d3d] bg-[#121212] p-0"
-                        aria-label="背景纯色"
-                      />
-                    </label>
-                  )}
-                </div>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showAlpha}
-                    onChange={(e) => setShowAlpha(e.target.checked)}
-                    className="rounded border-[#3d3d3d] bg-[#121212] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
-                  />
-                  <span className="text-gray-300">显示 Alpha 通道</span>
-                </label>
-              </div>
             </div>
             <div className="shrink-0 space-y-1 text-sm text-gray-400">
               <p className="truncate font-medium text-gray-200" title={previewImage.name}>

@@ -2,11 +2,16 @@
 
 export type OutputFormatOption = 'original' | 'png' | 'jpeg' | 'webp' | 'avif'
 
+/** 裁剪框归一化坐标的最小边长比例（与预览拖动一致） */
+export const MIN_CROP_NORM = 0.02
+
 /** none：不按比例缩放；再点同一百分比可回到 none */
 export type ResizePercentPreset = 'none' | 'p75' | 'p50' | 'p25' | 'custom'
 
 export interface ProcessOptions {
   format: OutputFormatOption
+  /** 是否应用旋转与镜像；关闭时预览与导出均不应用，但仍保留下方数值 */
+  rotateMirrorEnabled: boolean
   /** 累计 90° 步数（可正可负、不取模），导出时对 4 取模；预览用此值算角度以保证动画走最短弧 */
   rotateQuarterTurns: number
   flipHorizontal: boolean

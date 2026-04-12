@@ -13,6 +13,7 @@ import { FIXED_WATERMARK_DEFAULTS } from '../src/constants/fixedWatermark'
 function baseOptions(over: Partial<ProcessOptions> = {}): ProcessOptions {
   return {
     format: 'png',
+    rotateMirrorEnabled: false,
     rotateQuarterTurns: 0,
     flipHorizontal: false,
     flipVertical: false,
@@ -99,5 +100,20 @@ describe('imageProcessPayload', () => {
       undefined,
     )
     expect(o.crop).toEqual({ x: 0.1, y: 0.2, width: 0.5, height: 0.6 })
+  })
+
+  it('buildProcessImageInvokeOptions omits rotate/flip when rotateMirrorEnabled is false', () => {
+    const o = buildProcessImageInvokeOptions(
+      baseOptions({
+        rotateMirrorEnabled: false,
+        rotateQuarterTurns: 1,
+        flipHorizontal: true,
+        flipVertical: true,
+      }),
+      undefined,
+    )
+    expect(o).not.toHaveProperty('rotateQuarterTurns')
+    expect(o).not.toHaveProperty('flipHorizontal')
+    expect(o).not.toHaveProperty('flipVertical')
   })
 })

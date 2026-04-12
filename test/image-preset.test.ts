@@ -10,6 +10,7 @@ import type { ProcessOptions } from '../src/lib/imageProcessOptions'
 
 const fullOptions = (): ProcessOptions => ({
   format: 'webp',
+  rotateMirrorEnabled: false,
   rotateQuarterTurns: 2,
   flipHorizontal: true,
   flipVertical: false,

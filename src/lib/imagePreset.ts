@@ -36,6 +36,7 @@ const RESIZE_PRESETS: ReadonlySet<ResizePercentPreset> = new Set([
 
 export const DEFAULT_IMAGE_PRESET_STORED: ImageProcessPresetStored = {
   format: 'png',
+  rotateMirrorEnabled: false,
   rotateQuarterTurns: 0,
   flipHorizontal: false,
   flipVertical: false,
@@ -112,6 +113,7 @@ export function sanitizeImagePresetStored(raw: unknown): ImageProcessPresetStore
 
   return {
     format: pickFormat(d.format),
+    rotateMirrorEnabled: pickBool(d.rotateMirrorEnabled, base.rotateMirrorEnabled),
     rotateQuarterTurns: pickIntClamped(d.rotateQuarterTurns, base.rotateQuarterTurns, -1000, 1000),
     flipHorizontal: pickBool(d.flipHorizontal, base.flipHorizontal),
     flipVertical: pickBool(d.flipVertical, base.flipVertical),

@@ -82,7 +82,8 @@ export function buildProcessImageInvokeOptions(
   options: ProcessOptions,
   removalBackendId: string | undefined,
 ): Record<string, unknown> {
-  const rq = normalizedRotateQuarterTurnsForIpc(options.rotateQuarterTurns)
+  const mirrorOn = options.rotateMirrorEnabled !== false
+  const rq = mirrorOn ? normalizedRotateQuarterTurnsForIpc(options.rotateQuarterTurns) : 0
   const pixelW = options.resizeMode === 'pixels' ? parsePixelDim(options.width) : undefined
   const pixelH = options.resizeMode === 'pixels' ? parsePixelDim(options.height) : undefined
   const scalePct = options.resizeMode === 'percent' ? effectiveResizeScalePercent(options) : 100
@@ -91,8 +92,8 @@ export function buildProcessImageInvokeOptions(
   const base: Record<string, unknown> = {
     format: options.format,
     ...(rq !== 0 ? { rotateQuarterTurns: rq } : {}),
-    ...(options.flipHorizontal ? { flipHorizontal: true } : {}),
-    ...(options.flipVertical ? { flipVertical: true } : {}),
+    ...(mirrorOn && options.flipHorizontal ? { flipHorizontal: true } : {}),
+    ...(mirrorOn && options.flipVertical ? { flipVertical: true } : {}),
     quality: options.quality,
     ...(pixelW !== undefined || pixelH !== undefined
       ? {
