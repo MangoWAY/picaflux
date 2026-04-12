@@ -11,6 +11,7 @@ import {
 import {
   buildProcessImageInvokeOptions,
   getWatermarkRegionPercents,
+  isOverwriteCompatibleWithSourcePath,
   parseSliceGridDimension,
 } from '@/lib/imageProcessPayload'
 import { FIXED_WATERMARK_DEFAULTS } from '@/constants/fixedWatermark'
@@ -73,6 +74,7 @@ export function ImageWorkbench({
     keepAspectRatio: true,
     quality: 80,
     outputDir: '',
+    overwriteOriginal: false,
     removeBackground: false,
     clearFixedWatermark: false,
     watermarkLeftPct: FIXED_WATERMARK_DEFAULTS.leftPercent,
@@ -108,6 +110,20 @@ export function ImageWorkbench({
       return next
     })
   }, [imagePathsKey])
+
+  const overwriteCompatibleWithFormat = useMemo(() => {
+    if (checkedPaths.size === 0) return false
+    for (const p of checkedPaths) {
+      if (!isOverwriteCompatibleWithSourcePath(p, options.format)) return false
+    }
+    return true
+  }, [checkedPaths, options.format])
+
+  useEffect(() => {
+    if (!overwriteCompatibleWithFormat && options.overwriteOriginal) {
+      setOptions((prev) => ({ ...prev, overwriteOriginal: false }))
+    }
+  }, [overwriteCompatibleWithFormat, options.overwriteOriginal])
 
   const refreshImagePresets = useCallback(async () => {
     try {
@@ -226,7 +242,9 @@ export function ImageWorkbench({
 
   const handleStartProcessing = async () => {
     const batch = images.filter((img) => checkedPaths.has(img.path))
-    if (batch.length === 0 || !options.outputDir) return
+    if (batch.length === 0) return
+    if (options.overwriteOriginal && !overwriteCompatibleWithFormat) return
+    if (!options.overwriteOriginal && !options.outputDir) return
 
     setIsProcessing(true)
     setImages((prev) =>
@@ -267,19 +285,44 @@ export function ImageWorkbench({
                 xLines: options.sliceXLines,
                 yLines: options.sliceYLines,
               })
-            : await window.picafluxAPI.processImage(img.path, options.outputDir, processOpts)
+            : await window.picafluxAPI.processImage(
+                img.path,
+                options.overwriteOriginal ? '' : options.outputDir,
+                processOpts,
+              )
+
+          const outPath =
+            !options.sliceEnabled && result.success && 'outputPath' in result && result.outputPath
+              ? result.outputPath
+              : undefined
 
           setImages((prev) =>
-            prev.map((p) =>
-              p.path === img.path
-                ? {
-                    ...p,
-                    status: result.success ? 'done' : 'error',
-                    lastError: result.success ? undefined : (result.error ?? '处理失败'),
-                  }
-                : p,
-            ),
+            prev.map((p) => {
+              if (p.path !== img.path) return p
+              const pathChanged = Boolean(
+                options.overwriteOriginal && outPath && outPath !== img.path,
+              )
+              const nextPath = pathChanged ? outPath! : p.path
+              return {
+                ...p,
+                path: nextPath,
+                name: pathChanged ? (nextPath.split(/[/\\]/).pop() ?? p.name) : p.name,
+                previewUrl: pathChanged ? `file://${nextPath}` : p.previewUrl,
+                status: result.success ? 'done' : 'error',
+                lastError: result.success ? undefined : (result.error ?? '处理失败'),
+              }
+            }),
           )
+
+          if (options.overwriteOriginal && result.success && outPath && outPath !== img.path) {
+            setCheckedPaths((prev) => {
+              const n = new Set(prev)
+              n.delete(img.path)
+              n.add(outPath)
+              return n
+            })
+            setPreviewPath((prev) => (prev === img.path ? outPath : prev))
+          }
         } catch {
           setImages((prev) =>
             prev.map((p) =>
@@ -356,6 +399,7 @@ export function ImageWorkbench({
         onSelectOutputDir={handleSelectOutputDir}
         onStartProcessing={handleStartProcessing}
         isProcessing={isProcessing}
+        overwriteCompatibleWithFormat={overwriteCompatibleWithFormat}
         selectedForProcessCount={selectedCount}
         totalImageCount={images.length}
         imagePresets={imagePresets}

@@ -53,6 +53,7 @@ export const DEFAULT_IMAGE_PRESET_STORED: ImageProcessPresetStored = {
   height: '',
   keepAspectRatio: true,
   quality: 80,
+  overwriteOriginal: false,
   removeBackground: false,
   clearFixedWatermark: false,
   watermarkLeftPct: FIXED_WATERMARK_DEFAULTS.leftPercent,
@@ -130,6 +131,7 @@ export function sanitizeImagePresetStored(raw: unknown): ImageProcessPresetStore
     height: pickStr(d.height, base.height),
     keepAspectRatio: pickBool(d.keepAspectRatio, base.keepAspectRatio),
     quality: pickIntClamped(d.quality, base.quality, 1, 100),
+    overwriteOriginal: pickBool(d.overwriteOriginal, base.overwriteOriginal),
     removeBackground: pickBool(d.removeBackground, base.removeBackground),
     clearFixedWatermark: pickBool(d.clearFixedWatermark, base.clearFixedWatermark),
     watermarkLeftPct: pickStr(d.watermarkLeftPct, base.watermarkLeftPct),
@@ -154,6 +156,7 @@ export function mergePresetIntoOptions(
   return {
     ...s,
     outputDir: current.outputDir,
+    overwriteOriginal: current.overwriteOriginal,
     cropEnabled: current.cropEnabled,
     cropNorm: { ...current.cropNorm },
   }

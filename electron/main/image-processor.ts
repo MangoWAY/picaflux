@@ -1,6 +1,7 @@
 import sharp from 'sharp'
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
 import { getBackgroundRemovalBackend } from './background-removal/registry'
 
 /** 固定水印透明区域默认（相对图像宽高的百分比） */
@@ -58,6 +59,8 @@ export interface ProcessImageOptions {
    */
   trimTransparent?: boolean
   trimPaddingPx?: number
+  /** 为 true 时写入源文件所在目录并替换原图（可能因格式改变扩展名）；先写临时文件再替换 */
+  overwriteOriginal?: boolean
 }
 
 function clampPercent(n: number, fallback: number): number {
@@ -302,6 +305,7 @@ export function sanitizeProcessImageOptions(raw: unknown): ProcessImageOptions {
     crop,
     trimTransparent,
     trimPaddingPx,
+    overwriteOriginal: o.overwriteOriginal === true,
   }
 }
 
@@ -530,21 +534,74 @@ function computeCustomGridRects(
   return rects
 }
 
+function pathsEqualForOverwrite(a: string, b: string): boolean {
+  const na = path.normalize(a)
+  const nb = path.normalize(b)
+  if (na === nb) return true
+  if (process.platform !== 'linux') {
+    return na.toLowerCase() === nb.toLowerCase()
+  }
+  return false
+}
+
+async function unlinkIfExists(filePath: string): Promise<void> {
+  try {
+    await fs.unlink(filePath)
+  } catch (e: unknown) {
+    const code = typeof e === 'object' && e && 'code' in e ? (e as NodeJS.ErrnoException).code : ''
+    if (code !== 'ENOENT') throw e
+  }
+}
+
+/** 临时文件提交为最终结果；若扩展名变化则删除原路径文件 */
+async function commitTempToFinal(
+  tmpPath: string,
+  finalPath: string,
+  sourceInputPath: string,
+): Promise<void> {
+  const normFinal = path.normalize(finalPath)
+  const normSource = path.normalize(sourceInputPath)
+  await unlinkIfExists(finalPath)
+  await fs.rename(tmpPath, finalPath)
+  if (normFinal !== normSource) {
+    await unlinkIfExists(sourceInputPath)
+  }
+}
+
 export async function processImage(
   inputPath: string,
   outputDir: string,
   options: ProcessImageOptions,
 ): Promise<ProcessImageResult> {
+  let overwriteTmpPath: string | null = null
   try {
-    // Ensure output directory exists
-    await fs.mkdir(outputDir, { recursive: true })
-
     const parsedPath = path.parse(inputPath)
     const requested = options.format || 'original'
 
     const { format, outputExt } = resolveOutputFormatAndExt(inputPath, requested)
-    const outputFileName = `${parsedPath.name}_processed.${outputExt}`
-    const outputPath = path.join(outputDir, outputFileName)
+
+    const overwrite = options.overwriteOriginal === true
+    let outputPath: string
+    let writePath: string
+
+    if (overwrite) {
+      outputPath = path.join(parsedPath.dir, `${parsedPath.name}.${outputExt}`)
+      if (!pathsEqualForOverwrite(inputPath, outputPath)) {
+        return {
+          success: false,
+          error:
+            '覆盖原图仅当导出扩展名与源文件一致时可用；请改用「与原图相同」或选择与源扩展名相同的格式。',
+        }
+      }
+      const rand = randomBytes(10).toString('hex')
+      writePath = path.join(parsedPath.dir, `.picaflux-wip-${rand}.${outputExt}`)
+      overwriteTmpPath = writePath
+    } else {
+      await fs.mkdir(outputDir, { recursive: true })
+      const outputFileName = `${parsedPath.name}_processed.${outputExt}`
+      outputPath = path.join(outputDir, outputFileName)
+      writePath = outputPath
+    }
 
     let pipelineInput: string | Buffer = inputPath
     if (options.removeBackground) {
@@ -630,13 +687,21 @@ export async function processImage(
     const quality = options.quality || 80
     pipeline = applyFormatAndQuality(pipeline, format, quality)
 
-    await pipeline.toFile(outputPath)
+    await pipeline.toFile(writePath)
+
+    if (overwrite) {
+      await commitTempToFinal(writePath, outputPath, inputPath)
+      overwriteTmpPath = null
+    }
 
     return {
       success: true,
       outputPath,
     }
   } catch (error: unknown) {
+    if (overwriteTmpPath) {
+      await fs.unlink(overwriteTmpPath).catch(() => {})
+    }
     console.error('Error processing image:', error)
     const message = error instanceof Error ? error.message : 'Unknown error'
     return {

@@ -35,6 +35,8 @@ export interface ProcessOptions {
   keepAspectRatio: boolean
   quality: number
   outputDir: string
+  /** 处理结果覆盖源文件（需确认）；与输出目录二选一 */
+  overwriteOriginal: boolean
   removeBackground: boolean
   clearFixedWatermark: boolean
   watermarkLeftPct: string

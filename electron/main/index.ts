@@ -212,7 +212,11 @@ ipcMain.handle(
     if (typeof inputPath !== 'string' || typeof outputDir !== 'string') {
       return { success: false, error: 'Invalid path arguments' }
     }
-    return await processImage(inputPath, outputDir, sanitizeProcessImageOptions(options))
+    const cleaned = sanitizeProcessImageOptions(options)
+    if (!cleaned.overwriteOriginal && !outputDir.trim()) {
+      return { success: false, error: 'Invalid output directory' }
+    }
+    return await processImage(inputPath, outputDir, cleaned)
   },
 )
 

@@ -94,6 +94,8 @@ interface SettingsPanelProps {
   batchProgress: { current: number; total: number } | null
   /** 预览中当前图的「视觉」像素尺寸，用于裁剪四边数值与拖动同步 */
   cropVisualPx: { w: number; h: number } | null
+  /** 当前「格式」是否与所有勾选文件的扩展名一致（覆盖原图仅此时可用） */
+  overwriteCompatibleWithFormat: boolean
 }
 
 export function SettingsPanel({
@@ -110,6 +112,7 @@ export function SettingsPanel({
   onDeleteImagePreset,
   batchProgress,
   cropVisualPx,
+  overwriteCompatibleWithFormat,
 }: SettingsPanelProps) {
   const updateOption = <K extends keyof ProcessOptions>(key: K, value: ProcessOptions[K]) => {
     onChange({ ...options, [key]: value })
@@ -179,7 +182,12 @@ export function SettingsPanel({
     return () => el.removeEventListener('wheel', stop)
   }, [])
 
-  const canStart = selectedForProcessCount > 0 && Boolean(options.outputDir.trim())
+  const canStart =
+    selectedForProcessCount > 0 &&
+    (options.overwriteOriginal ? overwriteCompatibleWithFormat : Boolean(options.outputDir.trim()))
+
+  const overwriteCheckboxDisabled =
+    options.sliceEnabled || isProcessing || !overwriteCompatibleWithFormat
 
   return (
     <div
@@ -818,6 +826,7 @@ export function SettingsPanel({
                   onChange={(v) => {
                     const updates: Partial<ProcessOptions> = { sliceEnabled: v }
                     if (v) {
+                      updates.overwriteOriginal = false
                       const rows = parseInt(options.sliceRows, 10)
                       const cols = parseInt(options.sliceCols, 10)
                       if (options.sliceYLines === undefined && Number.isFinite(rows) && rows > 0) {
@@ -937,18 +946,70 @@ export function SettingsPanel({
 
         <div className="shrink-0 space-y-2 border-t border-[#2d2d2d] bg-[#1e1e1e] px-4 py-2.5">
           <div className="space-y-2">
+            <label
+              className={clsx(
+                'flex cursor-pointer items-center gap-2 text-sm text-gray-300',
+                overwriteCheckboxDisabled && 'cursor-not-allowed opacity-60',
+              )}
+              title={
+                options.sliceEnabled
+                  ? '网格切图时不可用覆盖原图'
+                  : !overwriteCompatibleWithFormat
+                    ? '仅当导出扩展名与所选源文件一致时可覆盖（请使用「与原图相同」或选择与源文件相同的格式）'
+                    : '导出到源路径并替换原文件，与下方输出目录二选一'
+              }
+            >
+              <input
+                type="checkbox"
+                className="h-4 w-4 shrink-0 rounded border-[#3d3d3d] bg-[#121212] text-blue-600 focus:ring-blue-500/30 disabled:cursor-not-allowed"
+                checked={options.overwriteOriginal}
+                disabled={overwriteCheckboxDisabled}
+                onChange={(e) => {
+                  const next = e.target.checked
+                  if (next) {
+                    const ok = window.confirm(
+                      '启用「覆盖原图」后，处理结果将直接替换磁盘上的原始文件，此操作不可撤销。\n\n确定要继续吗？',
+                    )
+                    if (!ok) return
+                  }
+                  updateOption('overwriteOriginal', next)
+                }}
+              />
+              <span className="min-w-0 flex-1 truncate">
+                <span className="font-medium text-gray-200">覆盖原图</span>
+                <span className="ml-1.5 text-xs text-gray-500">
+                  与输出目录二选一
+                  {options.sliceEnabled ? ' · 切图不可用' : ''}
+                  {!options.sliceEnabled &&
+                  !overwriteCompatibleWithFormat &&
+                  selectedForProcessCount > 0
+                    ? ' · 需与源扩展名一致'
+                    : null}
+                </span>
+              </span>
+            </label>
             <label className="text-sm font-medium text-gray-400">输出目录</label>
             <div className="flex gap-2">
               <div
-                className="flex-1 truncate rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-sm text-gray-400"
-                title={options.outputDir || '未选择'}
+                className={clsx(
+                  'flex-1 truncate rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-sm text-gray-400',
+                  options.overwriteOriginal && 'opacity-60',
+                )}
+                title={
+                  options.overwriteOriginal
+                    ? '已启用覆盖原图时不需要输出目录'
+                    : options.outputDir || '未选择'
+                }
               >
-                {options.outputDir || '请选择文件夹…'}
+                {options.overwriteOriginal
+                  ? '（已启用覆盖原图）'
+                  : options.outputDir || '请选择文件夹…'}
               </div>
               <button
                 type="button"
                 onClick={onSelectOutputDir}
-                className="rounded-md bg-[#2d2d2d] p-2 text-gray-300 transition-colors hover:bg-[#3d3d3d]"
+                disabled={options.overwriteOriginal || isProcessing}
+                className="rounded-md bg-[#2d2d2d] p-2 text-gray-300 transition-colors hover:bg-[#3d3d3d] disabled:cursor-not-allowed disabled:opacity-50"
                 title="选择文件夹"
               >
                 <FolderOpen className="w-5 h-5" />
@@ -964,8 +1025,8 @@ export function SettingsPanel({
             <p className="text-xs text-amber-500/90">
               {selectedForProcessCount === 0
                 ? '请至少勾选一张图片。'
-                : !options.outputDir.trim()
-                  ? '请选择输出目录。'
+                : !options.overwriteOriginal && !options.outputDir.trim()
+                  ? '请选择输出目录，或启用「覆盖原图」。'
                   : ''}
             </p>
           ) : null}

@@ -28,6 +28,7 @@ const fullOptions = (): ProcessOptions => ({
   keepAspectRatio: true,
   quality: 65,
   outputDir: '/tmp/out',
+  overwriteOriginal: true,
   removeBackground: true,
   clearFixedWatermark: true,
   watermarkLeftPct: '10',
@@ -50,7 +51,7 @@ describe('imagePreset', () => {
     expect(p.sliceXLines).toEqual([0.5])
   })
 
-  it('mergePresetIntoOptions keeps outputDir and crop from current', () => {
+  it('mergePresetIntoOptions keeps outputDir, overwriteOriginal and crop from current', () => {
     const preset: ImageProcessPresetStored = {
       ...DEFAULT_IMAGE_PRESET_STORED,
       format: 'jpeg',
@@ -61,6 +62,7 @@ describe('imagePreset', () => {
     expect(merged.format).toBe('jpeg')
     expect(merged.quality).toBe(42)
     expect(merged.outputDir).toBe('/tmp/out')
+    expect(merged.overwriteOriginal).toBe(true)
     expect(merged.cropEnabled).toBe(true)
     expect(merged.cropNorm).toEqual({ x: 0.1, y: 0.2, w: 0.5, h: 0.6 })
   })

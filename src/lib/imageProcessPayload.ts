@@ -1,4 +1,8 @@
-import type { ProcessOptions, ResizePercentPreset } from '@/lib/imageProcessOptions'
+import type {
+  OutputFormatOption,
+  ProcessOptions,
+  ResizePercentPreset,
+} from '@/lib/imageProcessOptions'
 import { FIXED_WATERMARK_DEFAULTS } from '../constants/fixedWatermark'
 
 /** 与预览叠加层、主进程 `fixedWatermarkRegion` 语义一致（相对原图宽高百分比） */
@@ -75,6 +79,66 @@ export function parseSliceGridDimension(s: string, fallback: number): number {
   return Math.min(64, Math.max(1, n))
 }
 
+/** 与主进程 `resolveOutputFormatAndExt` 中扩展名映射一致 */
+const EXT_TO_FORMAT: Record<string, 'png' | 'jpeg' | 'webp' | 'avif'> = {
+  png: 'png',
+  jpeg: 'jpeg',
+  jpg: 'jpeg',
+  webp: 'webp',
+  avif: 'avif',
+}
+
+function lastPathSegment(inputPath: string): string {
+  const norm = inputPath.replace(/\\/g, '/')
+  const slash = norm.lastIndexOf('/')
+  return slash >= 0 ? norm.slice(slash + 1) : norm
+}
+
+function splitStemAndExt(base: string): { stem: string; extNoDot: string } {
+  if (!base) return { stem: '', extNoDot: '' }
+  const lastDot = base.lastIndexOf('.')
+  if (lastDot <= 0) return { stem: base, extNoDot: '' }
+  return { stem: base.slice(0, lastDot), extNoDot: base.slice(lastDot + 1) }
+}
+
+function normalizeExtForCompare(ext: string): string {
+  const e = ext.toLowerCase()
+  return e === 'jpeg' ? 'jpg' : e
+}
+
+/**
+ * 当前「格式」选项下导出文件扩展名（不含点），与主进程管线一致。
+ */
+export function resolvedOutputExtensionForPath(
+  inputPath: string,
+  format: OutputFormatOption,
+): string {
+  const base = lastPathSegment(inputPath)
+  const { extNoDot } = splitStemAndExt(base)
+  const key = extNoDot.toLowerCase()
+
+  let fmt: 'png' | 'jpeg' | 'webp' | 'avif'
+  if (format === 'original') {
+    fmt = EXT_TO_FORMAT[key] ?? 'png'
+  } else {
+    fmt = format === 'jpeg' ? 'jpeg' : format
+  }
+  return fmt === 'jpeg' ? 'jpg' : fmt
+}
+
+/**
+ * 覆盖原图仅当导出路径与源路径相同（即扩展名与当前格式一致，含 jpeg/jpg 等价）时允许。
+ */
+export function isOverwriteCompatibleWithSourcePath(
+  inputPath: string,
+  format: OutputFormatOption,
+): boolean {
+  const base = lastPathSegment(inputPath)
+  const { extNoDot } = splitStemAndExt(base)
+  const outExt = resolvedOutputExtensionForPath(inputPath, format)
+  return normalizeExtForCompare(extNoDot) === normalizeExtForCompare(outExt)
+}
+
 /**
  * 传给 `picafluxAPI.processImage` / `sliceImageGrid` 的 options 对象（与主进程 sanitize 对齐前的形态）。
  */
@@ -132,6 +196,7 @@ export function buildProcessImageInvokeOptions(
           trimPaddingPx: parseTrimPaddingForIpc(options.trimPaddingPx),
         }
       : {}),
+    ...(options.overwriteOriginal ? { overwriteOriginal: true } : {}),
   }
 
   return base

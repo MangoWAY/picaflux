@@ -3,9 +3,11 @@ import {
   buildProcessImageInvokeOptions,
   effectiveResizeScalePercent,
   getWatermarkRegionPercents,
+  isOverwriteCompatibleWithSourcePath,
   normalizedRotateQuarterTurnsForIpc,
   parseSliceGridDimension,
   parseTrimPaddingForIpc,
+  resolvedOutputExtensionForPath,
 } from '../src/lib/imageProcessPayload'
 import type { ProcessOptions } from '../src/lib/imageProcessOptions'
 import { FIXED_WATERMARK_DEFAULTS } from '../src/constants/fixedWatermark'
@@ -31,6 +33,7 @@ function baseOptions(over: Partial<ProcessOptions> = {}): ProcessOptions {
     keepAspectRatio: true,
     quality: 80,
     outputDir: '/out',
+    overwriteOriginal: false,
     removeBackground: false,
     clearFixedWatermark: false,
     watermarkLeftPct: FIXED_WATERMARK_DEFAULTS.leftPercent,
@@ -115,5 +118,19 @@ describe('imageProcessPayload', () => {
     expect(o).not.toHaveProperty('rotateQuarterTurns')
     expect(o).not.toHaveProperty('flipHorizontal')
     expect(o).not.toHaveProperty('flipVertical')
+  })
+
+  it('buildProcessImageInvokeOptions passes overwriteOriginal when enabled', () => {
+    const o = buildProcessImageInvokeOptions(baseOptions({ overwriteOriginal: true }), undefined)
+    expect(o.overwriteOriginal).toBe(true)
+  })
+
+  it('isOverwriteCompatibleWithSourcePath matches main-process extension rules', () => {
+    expect(isOverwriteCompatibleWithSourcePath('/a/b.jpg', 'jpeg')).toBe(true)
+    expect(isOverwriteCompatibleWithSourcePath('/a/b.jpg', 'png')).toBe(false)
+    expect(isOverwriteCompatibleWithSourcePath('/a/b.jpeg', 'original')).toBe(true)
+    expect(resolvedOutputExtensionForPath('/x/y.jpeg', 'original')).toBe('jpg')
+    expect(isOverwriteCompatibleWithSourcePath('/a/b.png', 'original')).toBe(true)
+    expect(isOverwriteCompatibleWithSourcePath('/a/b.png', 'webp')).toBe(false)
   })
 })
