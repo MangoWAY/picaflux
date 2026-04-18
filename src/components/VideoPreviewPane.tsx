@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { UploadCloud, FileVideo } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
+import { UploadCloud } from 'lucide-react'
 import type { VideoFile } from './VideoStrip'
 import type { VideoProcessFormState } from '@/lib/videoFormPayload'
 import { VideoTimeline } from './VideoTimeline'
@@ -40,6 +40,8 @@ interface VideoPreviewPaneProps {
   form: VideoProcessFormState
   onFormChange: (next: VideoProcessFormState) => void
   isProcessing: boolean
+  /** 与图片模块一致：← / → 切换列表中的上一个 / 下一个 */
+  onNavigatePreview?: (delta: -1 | 1) => void
 }
 
 export function VideoPreviewPane({
@@ -51,8 +53,8 @@ export function VideoPreviewPane({
   form,
   onFormChange,
   isProcessing,
+  onNavigatePreview,
 }: VideoPreviewPaneProps) {
-  const [dragOver, setDragOver] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
 
   const collectPathsFromDataTransfer = useCallback((dt: DataTransfer): string[] => {
@@ -69,25 +71,28 @@ export function VideoPreviewPane({
     return paths
   }, [])
 
-  const onDragOver = (e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setDragOver(true)
-  }
+    if (e.dataTransfer.types.includes('Files')) {
+      e.dataTransfer.dropEffect = 'copy'
+    }
+  }, [])
 
-  const onDragLeave = (e: React.DragEvent) => {
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setDragOver(false)
-  }
+  }, [])
 
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragOver(false)
-    const paths = collectPathsFromDataTransfer(e.dataTransfer)
-    if (paths.length) onDropPaths(paths)
-  }
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const paths = collectPathsFromDataTransfer(e.dataTransfer)
+      if (paths.length > 0) onDropPaths(paths)
+    },
+    [collectPathsFromDataTransfer, onDropPaths],
+  )
 
   const src = previewVideo?.previewUrl
   const showTimeline = Boolean(
@@ -110,6 +115,25 @@ export function VideoPreviewPane({
   }, [form.mode])
 
   useEffect(() => {
+    if (!onNavigatePreview || videos.length === 0) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      const elTarget = e.target as HTMLElement | null
+      if (elTarget?.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        onNavigatePreview(-1)
+        return
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        onNavigatePreview(1)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onNavigatePreview, videos.length])
+
+  useEffect(() => {
     if (!previewVideo) return
     const onKeyDown = (e: KeyboardEvent) => {
       const elTarget = e.target as HTMLElement | null
@@ -121,19 +145,6 @@ export function VideoPreviewPane({
         e.preventDefault()
         if (el.paused) void el.play().catch(() => {})
         else el.pause()
-        return
-      }
-      const step = 1
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault()
-        el.currentTime = Math.max(0, el.currentTime - step)
-        return
-      }
-      if (e.key === 'ArrowRight') {
-        e.preventDefault()
-        const d = el.duration
-        const next = el.currentTime + step
-        el.currentTime = Number.isFinite(d) && d > 0 ? Math.min(d, next) : next
         return
       }
       const jump = 3
@@ -158,122 +169,131 @@ export function VideoPreviewPane({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [previewVideo])
 
+  const headerSubtitle = useMemo(() => {
+    if (videos.length === 0) return null
+    const base = `已选 ${selectedCount}/${videos.length} 个 · ←→ 切换预览`
+    if (showTimeline) return `${base} · 片段与时间线在下方调整`
+    return base
+  }, [videos.length, selectedCount, showTimeline])
+
   return (
     <div
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col border-r border-[#2d2d2d] bg-[#141414]"
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
+      className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-[#121212]"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#2d2d2d] px-4">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#2d2d2d] px-6">
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold text-white">预览</h2>
-          <p className="truncate text-xs text-gray-500">
-            {videos.length === 0
-              ? '拖入视频或点击添加'
-              : showTimeline
-                ? `${selectedCount} 项已选 · 共 ${videos.length} 个文件 · 时间与片段请在下方时间线调整`
-                : `${selectedCount} 项已选 · 共 ${videos.length} 个文件`}
-          </p>
-          {previewVideo ? (
-            <p className="mt-0.5 text-[10px] text-gray-600">
-              Space 播放/暂停 · ←/→ ±1s · J／K／L 快退/暂停/快进
+          <h1 className="text-lg font-semibold text-white">视频预览</h1>
+          {headerSubtitle ? (
+            <p className="truncate text-xs text-gray-500" title={headerSubtitle}>
+              {headerSubtitle}
             </p>
           ) : null}
         </div>
         <button
           type="button"
           onClick={onAddVideos}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+          className="shrink-0 rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
         >
-          <UploadCloud className="h-4 w-4" />
           添加视频
         </button>
       </div>
 
-      <div
-        className={`flex min-h-0 flex-1 flex-col items-center justify-center p-6 ${
-          dragOver ? 'bg-blue-500/5 ring-2 ring-inset ring-blue-500/40' : ''
-        }`}
-      >
-        {!previewVideo ? (
-          <div className="flex max-w-md flex-col items-center text-center text-gray-500">
-            <FileVideo className="mb-4 h-16 w-16 opacity-40" />
-            <p className="text-sm">选择左侧列表中的视频，或拖放文件到此处</p>
+      <div className="min-h-0 flex-1 overflow-hidden p-6">
+        {videos.length === 0 ? (
+          <div
+            className="flex h-full min-h-[280px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#2d2d2d] bg-[#1a1a1a] text-gray-500"
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+          >
+            <UploadCloud className="mb-3 h-10 w-10 text-gray-600" />
+            <p className="text-sm text-gray-400">拖入视频或点击添加</p>
           </div>
-        ) : (
-          <div className="flex h-full w-full max-w-4xl flex-col gap-4">
-            <video
-              ref={videoRef}
-              key={previewVideo.path}
-              src={src}
-              controls
-              className="max-h-[min(60vh,520px)] w-full rounded-lg bg-black object-contain"
-            />
-            {showTimeline && timelineMode ? (
-              <VideoTimeline
-                mode={timelineMode}
-                videoEl={videoRef.current}
-                durationSec={previewVideo.durationSec}
-                startSecStr={form.startSecStr}
-                durationSecStr={form.durationSecStr}
-                timeSecStr={form.timeSecStr}
-                disabled={isProcessing}
-                onChange={(patch) => {
-                  onFormChange({ ...form, ...patch })
-                }}
-              />
-            ) : null}
-            <div className="grid grid-cols-2 gap-2 text-xs text-gray-400 sm:grid-cols-4">
-              <div>
-                <span className="text-gray-600">时长</span>
-                <p className="text-gray-300">{formatDuration(previewVideo.durationSec)}</p>
+        ) : previewVideo ? (
+          <div className="flex h-full min-h-0 flex-col gap-3">
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#0d0d0d] p-3">
+              <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
+                <video
+                  ref={videoRef}
+                  key={previewVideo.path}
+                  src={src}
+                  controls
+                  className="max-h-full max-w-full rounded-lg bg-black object-contain shadow-[0_0_0_1px_rgba(255,255,255,0.06)]"
+                />
               </div>
-              <div>
-                <span className="text-gray-600">分辨率</span>
-                <p className="text-gray-300">
-                  {previewVideo.width && previewVideo.height
-                    ? `${previewVideo.width}×${previewVideo.height}`
-                    : '—'}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-600">大小</span>
-                <p className="text-gray-300">{formatSize(previewVideo.size)}</p>
-              </div>
-              <div>
-                <span className="text-gray-600">路径</span>
-                <p className="truncate text-gray-300" title={previewVideo.path}>
-                  {previewVideo.name}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-600">封装</span>
-                <p className="truncate text-gray-300" title={previewVideo.formatName}>
-                  {previewVideo.formatName ?? '—'}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-600">编码</span>
-                <p
-                  className="truncate text-gray-300"
-                  title={`${previewVideo.videoCodec ?? '—'} / ${previewVideo.audioCodec ?? '—'}`}
-                >
-                  {(previewVideo.videoCodec ?? '—') + ' / ' + (previewVideo.audioCodec ?? '—')}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-600">码率</span>
-                <p className="text-gray-300">{formatBitrate(previewVideo.bitRateBps)}</p>
-              </div>
-              <div>
-                <span className="text-gray-600">视频/音频码率</span>
-                <p className="text-gray-300">
-                  {formatBitrate(previewVideo.videoBitRateBps)} /{' '}
-                  {formatBitrate(previewVideo.audioBitRateBps)}
-                </p>
+              {showTimeline && timelineMode ? (
+                <div className="shrink-0 border-t border-[#2a2a2a] pt-3">
+                  <VideoTimeline
+                    mode={timelineMode}
+                    videoEl={videoRef.current}
+                    durationSec={previewVideo.durationSec}
+                    startSecStr={form.startSecStr}
+                    durationSecStr={form.durationSecStr}
+                    timeSecStr={form.timeSecStr}
+                    disabled={isProcessing}
+                    onChange={(patch) => {
+                      onFormChange({ ...form, ...patch })
+                    }}
+                  />
+                </div>
+              ) : null}
+              <p className="shrink-0 text-center text-[10px] text-gray-600">
+                Space 播放/暂停 · J／K／L 快退/暂停/快进 · 时间轴可用控件拖动
+              </p>
+            </div>
+
+            <div className="shrink-0 space-y-2 text-sm text-gray-400">
+              <p className="truncate font-medium text-gray-200" title={previewVideo.name}>
+                {previewVideo.name}
+              </p>
+              <p className="text-xs text-gray-500">
+                {previewVideo.width && previewVideo.height
+                  ? `${previewVideo.width}×${previewVideo.height}`
+                  : '—'}{' '}
+                · {formatDuration(previewVideo.durationSec)} · {formatSize(previewVideo.size)}
+                {previewVideo.formatName ? ` · ${previewVideo.formatName}` : ''}
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+                <div>
+                  <span className="text-gray-600">视频编码</span>
+                  <p className="truncate text-gray-300" title={previewVideo.videoCodec ?? ''}>
+                    {previewVideo.videoCodec ?? '—'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-600">音频编码</span>
+                  <p className="truncate text-gray-300" title={previewVideo.audioCodec ?? ''}>
+                    {previewVideo.audioCodec ?? '—'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-600">总码率</span>
+                  <p className="text-gray-300">{formatBitrate(previewVideo.bitRateBps)}</p>
+                </div>
+                <div>
+                  <span className="text-gray-600">视频 / 音频码率</span>
+                  <p className="text-gray-300">
+                    {formatBitrate(previewVideo.videoBitRateBps)} /{' '}
+                    {formatBitrate(previewVideo.audioBitRateBps)}
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-gray-600">路径</span>
+                  <p
+                    className="truncate font-mono text-[11px] text-gray-400"
+                    title={previewVideo.path}
+                  >
+                    {previewVideo.path}
+                  </p>
+                </div>
               </div>
             </div>
+          </div>
+        ) : (
+          <div className="flex h-full items-center justify-center text-gray-500">
+            在左侧选择一个视频预览
           </div>
         )}
       </div>

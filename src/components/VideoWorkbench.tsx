@@ -374,6 +374,18 @@ export function VideoWorkbench() {
   const previewVideo = previewPath ? (videos.find((x) => x.path === previewPath) ?? null) : null
   const selectedCount = checkedPaths.size
 
+  const handleNavigatePreview = useCallback(
+    (delta: -1 | 1) => {
+      if (videos.length === 0) return
+      const idx = previewPath ? videos.findIndex((v) => v.path === previewPath) : -1
+      const cur = idx >= 0 ? idx : 0
+      const len = videos.length
+      const next = (cur + delta + len) % len
+      setPreviewPath(videos[next].path)
+    },
+    [videos, previewPath],
+  )
+
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
       <VideoStrip
@@ -400,6 +412,7 @@ export function VideoWorkbench() {
         form={form}
         onFormChange={setForm}
         isProcessing={isProcessing}
+        onNavigatePreview={handleNavigatePreview}
       />
       <VideoSettingsPanel
         state={form}
