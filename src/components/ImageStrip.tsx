@@ -72,7 +72,7 @@ export function ImageStrip({
   )
 
   return (
-    <div className="flex h-full min-h-0 w-[220px] shrink-0 flex-col border-r border-[#2d2d2d] bg-[#181818]">
+    <div className="flex h-full min-h-0 w-[220px] shrink-0 flex-col bg-[#181818]">
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-[#2d2d2d] px-3">
         <label
           className="flex cursor-pointer items-center gap-2 text-xs text-gray-400"

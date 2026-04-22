@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { ImageStrip, ImageFile, type ImageStripListMode } from './ImageStrip'
 import { ImagePreviewPane } from './ImagePreviewPane'
+import { QueueSidebarCollapseHandle } from './QueueSidebarCollapseHandle'
 import { SettingsPanel } from './SettingsPanel'
+import { ChevronRight } from 'lucide-react'
 import type { ProcessOptions } from '@/lib/imageProcessOptions'
 import {
   mergePresetIntoOptions,
@@ -46,6 +48,7 @@ export function ImageWorkbench({
 }) {
   const [images, setImages] = useState<ImageFile[]>([])
   const [stripListMode, setStripListMode] = useState<ImageStripListMode>('thumbnail')
+  const [isStripCollapsed, setIsStripCollapsed] = useState(false)
   const [checkedPaths, setCheckedPaths] = useState<Set<string>>(() => new Set())
   const [previewPath, setPreviewPath] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -356,18 +359,35 @@ export function ImageWorkbench({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
-      <ImageStrip
-        images={images}
-        listMode={stripListMode}
-        onListModeChange={setStripListMode}
-        checkedPaths={checkedPaths}
-        onTogglePath={handleTogglePath}
-        onSelectAll={handleSelectAllForProcess}
-        onClearSelection={handleClearProcessSelection}
-        previewPath={previewPath}
-        onPreviewPath={setPreviewPath}
-        onRemoveImage={handleRemoveImage}
-      />
+      {isStripCollapsed ? (
+        <div className="flex h-full w-9 shrink-0 items-center justify-center border-r border-[#2d2d2d] bg-[#181818]">
+          <button
+            type="button"
+            onClick={() => setIsStripCollapsed(false)}
+            className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-[#2d2d2d] hover:text-gray-200"
+            aria-label="展开队列"
+            title="展开队列"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <div className="flex h-full min-h-0 shrink-0">
+          <ImageStrip
+            images={images}
+            listMode={stripListMode}
+            onListModeChange={setStripListMode}
+            checkedPaths={checkedPaths}
+            onTogglePath={handleTogglePath}
+            onSelectAll={handleSelectAllForProcess}
+            onClearSelection={handleClearProcessSelection}
+            previewPath={previewPath}
+            onPreviewPath={setPreviewPath}
+            onRemoveImage={handleRemoveImage}
+          />
+          <QueueSidebarCollapseHandle onCollapse={() => setIsStripCollapsed(true)} />
+        </div>
+      )}
       <ImagePreviewPane
         images={images}
         previewImage={previewImage}

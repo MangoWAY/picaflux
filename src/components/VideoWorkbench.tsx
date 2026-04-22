@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { VideoStrip, type VideoFile, type VideoStripListMode } from './VideoStrip'
 import { VideoPreviewPane } from './VideoPreviewPane'
+import { QueueSidebarCollapseHandle } from './QueueSidebarCollapseHandle'
 import { VideoSettingsPanel } from './VideoSettingsPanel'
+import { ChevronRight } from 'lucide-react'
 import { buildVideoProcessPayload, type VideoProcessFormState } from '@/lib/videoFormPayload'
 import type { VideoProcessPresetRecord } from '@/lib/videoPreset'
 import { mergeVideoPresetIntoForm, toVideoPresetPayload } from '@/lib/videoPreset'
@@ -62,6 +64,7 @@ const defaultForm: VideoProcessFormState = {
 export function VideoWorkbench() {
   const [videos, setVideos] = useState<VideoFile[]>([])
   const [stripListMode, setStripListMode] = useState<VideoStripListMode>('thumbnail')
+  const [isStripCollapsed, setIsStripCollapsed] = useState(false)
   const [checkedPaths, setCheckedPaths] = useState<Set<string>>(() => new Set())
   const [previewPath, setPreviewPath] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -388,21 +391,38 @@ export function VideoWorkbench() {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
-      <VideoStrip
-        videos={videos}
-        listMode={stripListMode}
-        onListModeChange={setStripListMode}
-        checkedPaths={checkedPaths}
-        onTogglePath={handleTogglePath}
-        onSelectAll={handleSelectAllForProcess}
-        onClearSelection={handleClearProcessSelection}
-        previewPath={previewPath}
-        onPreviewPath={setPreviewPath}
-        onRemoveVideo={handleRemoveVideo}
-        concatMode={form.mode === 'concat'}
-        onReorder={reorderVideos}
-        reorderLocked={isProcessing}
-      />
+      {isStripCollapsed ? (
+        <div className="flex h-full w-9 shrink-0 items-center justify-center border-r border-[#2d2d2d] bg-[#181818]">
+          <button
+            type="button"
+            onClick={() => setIsStripCollapsed(false)}
+            className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-[#2d2d2d] hover:text-gray-200"
+            aria-label="展开队列"
+            title="展开队列"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <div className="flex h-full min-h-0 shrink-0">
+          <VideoStrip
+            videos={videos}
+            listMode={stripListMode}
+            onListModeChange={setStripListMode}
+            checkedPaths={checkedPaths}
+            onTogglePath={handleTogglePath}
+            onSelectAll={handleSelectAllForProcess}
+            onClearSelection={handleClearProcessSelection}
+            previewPath={previewPath}
+            onPreviewPath={setPreviewPath}
+            onRemoveVideo={handleRemoveVideo}
+            concatMode={form.mode === 'concat'}
+            onReorder={reorderVideos}
+            reorderLocked={isProcessing}
+          />
+          <QueueSidebarCollapseHandle onCollapse={() => setIsStripCollapsed(true)} />
+        </div>
+      )}
       <VideoPreviewPane
         videos={videos}
         previewVideo={previewVideo}
