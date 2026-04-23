@@ -65,6 +65,15 @@ contextBridge.exposeInMainWorld('picafluxAPI', {
       dataUrl?: string
       error?: string
     }>,
+  getVideoTimelineThumbnails: (
+    filePath: string,
+    opts: { count: number; durationSec?: number; maxWidth?: number },
+  ) =>
+    ipcRenderer.invoke('video:getTimelineThumbnails', filePath, opts) as Promise<{
+      success: boolean
+      dataUrls?: string[]
+      error?: string
+    }>,
   cancelVideoTask: (taskId: string) =>
     ipcRenderer.invoke('video:cancel', taskId) as Promise<boolean>,
   listVideoProcessPresets: () =>

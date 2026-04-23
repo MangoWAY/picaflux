@@ -1,9 +1,11 @@
 import type {
   VideoFlipUi,
+  VideoModeEnabledMap,
   VideoProcessFormState,
   VideoRotationUi,
   VideoWorkbenchMode,
 } from './videoFormPayload'
+import { createEmptyModeEnabled } from './videoFormPayload'
 
 /** 写入磁盘的预设体：不含输出目录 */
 export type VideoProcessPresetStored = Omit<VideoProcessFormState, 'outputDir'>
@@ -38,6 +40,7 @@ const FLIP: ReadonlySet<VideoFlipUi> = new Set(['none', 'horizontal', 'vertical'
 
 export const DEFAULT_VIDEO_PRESET_STORED: VideoProcessPresetStored = {
   mode: 'transcode',
+  modeEnabled: createEmptyModeEnabled(),
   transcodePreset: 'web_mp4',
   maxWidthStr: '1280',
   startSecStr: '0',
@@ -50,6 +53,7 @@ export const DEFAULT_VIDEO_PRESET_STORED: VideoProcessPresetStored = {
   gifFpsStr: '10',
   gifMaxWidthStr: '480',
   webpQualityStr: '75',
+  videoTransformEnabled: true,
   videoRotation: '0',
   videoFlip: 'none',
   playbackSpeedStr: '1.5',
@@ -83,6 +87,39 @@ function pickFlip(v: unknown): VideoFlipUi {
     : DEFAULT_VIDEO_PRESET_STORED.videoFlip
 }
 
+function pickTransformEnabled(v: unknown): boolean {
+  if (typeof v === 'boolean') return v
+  if (v === 'false' || v === 0) return false
+  return DEFAULT_VIDEO_PRESET_STORED.videoTransformEnabled
+}
+
+function pickModeEnabledMap(
+  d: Record<string, unknown>,
+  legacyMode: VideoWorkbenchMode,
+): VideoModeEnabledMap {
+  const out = createEmptyModeEnabled()
+  if (
+    'modeEnabled' in d &&
+    d.modeEnabled &&
+    typeof d.modeEnabled === 'object' &&
+    !Array.isArray(d.modeEnabled)
+  ) {
+    const o = d.modeEnabled as Record<string, unknown>
+    for (const m of MODES) {
+      if (o[m] === true) {
+        out[m] = true
+      } else if (o[m] === false) {
+        out[m] = false
+      }
+    }
+    return out
+  }
+  if ('mode' in d && typeof d.mode === 'string' && MODES.has(d.mode as VideoWorkbenchMode)) {
+    out[legacyMode] = true
+  }
+  return out
+}
+
 function pickFrameFormat(v: unknown): 'png' | 'jpeg' {
   return v === 'jpeg' ? 'jpeg' : 'png'
 }
@@ -100,8 +137,10 @@ export function sanitizeVideoPresetStored(raw: unknown): VideoProcessPresetStore
     raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
   const base = DEFAULT_VIDEO_PRESET_STORED
 
+  const legacyMode = pickMode(d.mode)
   return {
-    mode: pickMode(d.mode),
+    mode: legacyMode,
+    modeEnabled: pickModeEnabledMap(d, legacyMode),
     transcodePreset: pickTranscodePreset(d.transcodePreset),
     maxWidthStr: pickStr(d.maxWidthStr, base.maxWidthStr),
     startSecStr: pickStr(d.startSecStr, base.startSecStr),
@@ -114,6 +153,7 @@ export function sanitizeVideoPresetStored(raw: unknown): VideoProcessPresetStore
     gifFpsStr: pickStr(d.gifFpsStr, base.gifFpsStr),
     gifMaxWidthStr: pickStr(d.gifMaxWidthStr, base.gifMaxWidthStr),
     webpQualityStr: pickStr(d.webpQualityStr, base.webpQualityStr),
+    videoTransformEnabled: pickTransformEnabled(d.videoTransformEnabled),
     videoRotation: pickRotation(d.videoRotation),
     videoFlip: pickFlip(d.videoFlip),
     playbackSpeedStr: pickStr(d.playbackSpeedStr, base.playbackSpeedStr),

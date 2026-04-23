@@ -1,8 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { buildVideoProcessPayload, type VideoProcessFormState } from '../src/lib/videoFormPayload'
+import {
+  buildVideoProcessPayload,
+  createEmptyModeEnabled,
+  type VideoProcessFormState,
+} from '../src/lib/videoFormPayload'
 
 const base: VideoProcessFormState = {
   mode: 'transcode',
+  modeEnabled: createEmptyModeEnabled(),
   outputDir: '/tmp',
   transcodePreset: 'web_mp4',
   maxWidthStr: '0',
@@ -16,6 +21,7 @@ const base: VideoProcessFormState = {
   gifFpsStr: '10',
   gifMaxWidthStr: '480',
   webpQualityStr: '75',
+  videoTransformEnabled: true,
   videoRotation: '0',
   videoFlip: 'none',
   playbackSpeedStr: '1',
@@ -62,6 +68,20 @@ describe('buildVideoProcessPayload', () => {
     expect(p).toMatchObject({
       videoRotationDeg: 90,
       videoFlip: 'horizontal',
+    })
+  })
+
+  it('omits rotation and flip when videoTransformEnabled is false', () => {
+    const p = buildVideoProcessPayload({
+      ...base,
+      mode: 'transcode',
+      videoTransformEnabled: false,
+      videoRotation: '90',
+      videoFlip: 'horizontal',
+    })
+    expect(p).toMatchObject({
+      videoRotationDeg: 0,
+      videoFlip: 'none',
     })
   })
 

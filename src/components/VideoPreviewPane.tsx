@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { UploadCloud } from 'lucide-react'
 import type { VideoFile } from './VideoStrip'
-import type { VideoProcessFormState } from '@/lib/videoFormPayload'
+import { resolveTimelineMode, type VideoProcessFormState } from '@/lib/videoFormPayload'
 import { VideoTimeline } from './VideoTimeline'
 
 const VIDEO_EXT = /\.(mp4|mov|mkv|webm|m4v|avi|mpeg|mpg)$/i
@@ -95,24 +95,8 @@ export function VideoPreviewPane({
   )
 
   const src = previewVideo?.previewUrl
-  const showTimeline = Boolean(
-    previewVideo &&
-    (form.mode === 'trim' ||
-      form.mode === 'gif' ||
-      form.mode === 'webp_anim' ||
-      form.mode === 'extract_frame'),
-  )
-
-  const timelineMode = useMemo(() => {
-    if (
-      form.mode === 'trim' ||
-      form.mode === 'gif' ||
-      form.mode === 'webp_anim' ||
-      form.mode === 'extract_frame'
-    )
-      return form.mode
-    return null
-  }, [form.mode])
+  const timelineMode = resolveTimelineMode(form)
+  const showTimeline = Boolean(previewVideo && timelineMode != null)
 
   useEffect(() => {
     if (!onNavigatePreview || videos.length === 0) return
@@ -228,6 +212,7 @@ export function VideoPreviewPane({
                   <VideoTimeline
                     mode={timelineMode}
                     videoEl={videoRef.current}
+                    filmstripVideoPath={previewVideo.path}
                     durationSec={previewVideo.durationSec}
                     startSecStr={form.startSecStr}
                     durationSecStr={form.durationSecStr}

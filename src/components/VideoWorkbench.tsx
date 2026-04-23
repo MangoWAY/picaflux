@@ -4,7 +4,12 @@ import { VideoPreviewPane } from './VideoPreviewPane'
 import { QueueSidebarCollapseHandle } from './QueueSidebarCollapseHandle'
 import { VideoSettingsPanel } from './VideoSettingsPanel'
 import { ChevronRight } from 'lucide-react'
-import { buildVideoProcessPayload, type VideoProcessFormState } from '@/lib/videoFormPayload'
+import {
+  buildVideoProcessPayload,
+  createEmptyModeEnabled,
+  listEnabledModesInOrder,
+  type VideoProcessFormState,
+} from '@/lib/videoFormPayload'
 import type { VideoProcessPresetRecord } from '@/lib/videoPreset'
 import { mergeVideoPresetIntoForm, toVideoPresetPayload } from '@/lib/videoPreset'
 
@@ -43,6 +48,7 @@ async function buildVideoEntries(paths: string[]): Promise<VideoFile[]> {
 
 const defaultForm: VideoProcessFormState = {
   mode: 'transcode',
+  modeEnabled: createEmptyModeEnabled(),
   outputDir: '',
   transcodePreset: 'web_mp4',
   maxWidthStr: '1280',
@@ -56,6 +62,7 @@ const defaultForm: VideoProcessFormState = {
   gifFpsStr: '10',
   gifMaxWidthStr: '480',
   webpQualityStr: '75',
+  videoTransformEnabled: true,
   videoRotation: '0',
   videoFlip: 'none',
   playbackSpeedStr: '1.5',
@@ -276,6 +283,13 @@ export function VideoWorkbench() {
     const batch = videos.filter((v) => checkedPaths.has(v.path))
     if (!batch.length || !form.outputDir.trim()) return
 
+    const enabledModes = listEnabledModesInOrder(form.modeEnabled)
+    if (enabledModes.length === 0) return
+
+    const modesPerFile = enabledModes.filter((m) => m !== 'concat')
+    const hasConcat = enabledModes.includes('concat')
+    if (hasConcat && batch.length < 2) return
+
     setIsProcessing(true)
     setVideos((prev) =>
       prev.map((v) =>
@@ -285,85 +299,87 @@ export function VideoWorkbench() {
       ),
     )
 
-    const payloadBase = buildVideoProcessPayload(form)
+    const totalSteps = modesPerFile.length * batch.length + (hasConcat ? 1 : 0)
+    let step = 0
 
-    if (form.mode === 'concat') {
-      if (batch.length < 2) {
-        setVideos((prev) => prev.map((v) => ({ ...v, status: 'pending' as const })))
-        setIsProcessing(false)
-        return
-      }
-      const orderedPaths = videos.filter((v) => checkedPaths.has(v.path)).map((v) => v.path)
-      const taskId = newTaskId()
-      activeTaskIdRef.current = taskId
-      setProgressPercent(0)
-      setBatchProgress({ current: 1, total: 1 })
-      try {
-        const result = await window.picafluxAPI.processVideoConcat(
-          taskId,
-          orderedPaths,
-          form.outputDir,
-          payloadBase,
-        )
-        setVideos((prev) =>
-          prev.map((p) =>
-            checkedPaths.has(p.path)
-              ? {
-                  ...p,
-                  status: result.success ? 'done' : 'error',
-                  lastError: result.success ? undefined : (result.error ?? '合并失败'),
-                }
-              : p,
-          ),
-        )
-      } catch {
-        setVideos((prev) =>
-          prev.map((p) =>
-            checkedPaths.has(p.path)
-              ? { ...p, status: 'error' as const, lastError: '合并失败' }
-              : p,
-          ),
-        )
-      }
-      setProgressPercent(null)
-      activeTaskIdRef.current = null
-      setBatchProgress(null)
-      setIsProcessing(false)
-      return
+    const markVideoResult = (path: string, success: boolean, err?: string) => {
+      setVideos((prev) =>
+        prev.map((p) =>
+          p.path === path
+            ? {
+                ...p,
+                status: success ? 'done' : 'error',
+                lastError: success ? undefined : (err ?? '处理失败'),
+              }
+            : p,
+        ),
+      )
     }
 
-    setBatchProgress({ current: 0, total: batch.length })
+    const markConcatBatchResult = (success: boolean, err?: string) => {
+      setVideos((prev) =>
+        prev.map((p) =>
+          checkedPaths.has(p.path)
+            ? {
+                ...p,
+                status: success ? 'done' : 'error',
+                lastError: success ? undefined : (err ?? '合并失败'),
+              }
+            : p,
+        ),
+      )
+    }
+
     try {
-      for (let i = 0; i < batch.length; i++) {
-        const v = batch[i]
-        setBatchProgress({ current: i + 1, total: batch.length })
+      for (const v of batch) {
+        let fileOk = true
+        let fileErr: string | undefined
+        for (const mode of modesPerFile) {
+          step += 1
+          setBatchProgress({ current: step, total: totalSteps })
+          const taskId = newTaskId()
+          activeTaskIdRef.current = taskId
+          setProgressPercent(0)
+          const payload = buildVideoProcessPayload(form, mode)
+          try {
+            const result = await window.picafluxAPI.processVideo(
+              taskId,
+              v.path,
+              form.outputDir,
+              payload,
+            )
+            if (!result.success) {
+              fileOk = false
+              fileErr = result.error ?? '处理失败'
+            }
+          } catch {
+            fileOk = false
+            fileErr = '处理失败'
+          }
+          setProgressPercent(null)
+          activeTaskIdRef.current = null
+        }
+        markVideoResult(v.path, fileOk, fileErr)
+      }
+
+      if (hasConcat) {
+        step += 1
+        setBatchProgress({ current: step, total: totalSteps })
         const taskId = newTaskId()
         activeTaskIdRef.current = taskId
         setProgressPercent(0)
+        const concatPayload = buildVideoProcessPayload(form, 'concat')
+        const orderedPaths = videos.filter((x) => checkedPaths.has(x.path)).map((x) => x.path)
         try {
-          const result = await window.picafluxAPI.processVideo(
+          const result = await window.picafluxAPI.processVideoConcat(
             taskId,
-            v.path,
+            orderedPaths,
             form.outputDir,
-            payloadBase,
+            concatPayload,
           )
-          setVideos((prev) =>
-            prev.map((p) =>
-              p.path === v.path
-                ? {
-                    ...p,
-                    status: result.success ? 'done' : 'error',
-                    lastError: result.success ? undefined : (result.error ?? '处理失败'),
-                  }
-                : p,
-            ),
-          )
+          markConcatBatchResult(result.success, result.error)
         } catch {
-          setVideos((prev) =>
-            prev.map((p) =>
-              p.path === v.path ? { ...p, status: 'error' as const, lastError: '处理失败' } : p,
-            ),
-          )
+          markConcatBatchResult(false, '合并失败')
         }
         setProgressPercent(null)
         activeTaskIdRef.current = null
@@ -416,7 +432,7 @@ export function VideoWorkbench() {
             previewPath={previewPath}
             onPreviewPath={setPreviewPath}
             onRemoveVideo={handleRemoveVideo}
-            concatMode={form.mode === 'concat'}
+            concatMode={form.modeEnabled.concat}
             onReorder={reorderVideos}
             reorderLocked={isProcessing}
           />

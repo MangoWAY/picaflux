@@ -26,6 +26,7 @@ import {
   processVideoConcat,
   getVideoFileInfo,
   getVideoThumbnailDataUrl,
+  getVideoTimelineThumbnails,
   cancelVideoTask,
 } from './video-processor'
 import { getModel3dFileInfo, save3dThumbnailPng, processGlbConvert } from './gltf-3d-processor'
@@ -339,6 +340,39 @@ ipcMain.handle('video:getThumbnail', async (_, inputPath: string) => {
     return { success: false, error: 'Invalid arguments' }
   }
   return await getVideoThumbnailDataUrl(inputPath)
+})
+
+ipcMain.handle('video:getTimelineThumbnails', async (_, inputPath: unknown, opts: unknown) => {
+  if (typeof inputPath !== 'string' || !inputPath.trim()) {
+    return { success: false, error: 'Invalid arguments' }
+  }
+  const o = opts && typeof opts === 'object' ? (opts as Record<string, unknown>) : {}
+  const countRaw = o.count
+  const count =
+    typeof countRaw === 'number'
+      ? countRaw
+      : typeof countRaw === 'string'
+        ? parseInt(countRaw, 10)
+        : NaN
+  const durRaw = o.durationSec
+  const durationSec =
+    typeof durRaw === 'number'
+      ? durRaw
+      : typeof durRaw === 'string'
+        ? parseFloat(durRaw.replace(',', '.'))
+        : NaN
+  const maxWRaw = o.maxWidth
+  const maxWidth =
+    typeof maxWRaw === 'number'
+      ? maxWRaw
+      : typeof maxWRaw === 'string'
+        ? parseInt(maxWRaw, 10)
+        : undefined
+  return await getVideoTimelineThumbnails(inputPath, {
+    count: Number.isFinite(count) ? count : 12,
+    durationSec: Number.isFinite(durationSec) && durationSec > 0 ? durationSec : undefined,
+    maxWidth: Number.isFinite(maxWidth as number) ? (maxWidth as number) : undefined,
+  })
 })
 
 ipcMain.handle('video:cancel', (_, taskId: string) => {

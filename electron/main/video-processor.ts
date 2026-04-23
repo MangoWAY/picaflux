@@ -189,6 +189,157 @@ export async function getVideoThumbnailDataUrl(
   }
 }
 
+/** 时间轴胶片条：沿时长均匀抽取多帧（PNG data URL） */
+export async function getVideoTimelineThumbnails(
+  inputPath: string,
+  options: { count: number; durationSec?: number; maxWidth?: number },
+): Promise<{ success: boolean; dataUrls?: string[]; error?: string }> {
+  if (typeof inputPath !== 'string' || !inputPath.trim()) {
+    return { success: false, error: 'invalid path' }
+  }
+  const st = await fs.stat(inputPath).catch(() => null)
+  if (!st || !st.isFile()) {
+    return { success: false, error: 'not found' }
+  }
+
+  const countRaw = Number(options.count)
+  const count = Number.isFinite(countRaw) ? Math.min(48, Math.max(4, Math.round(countRaw))) : 12
+  const maxWRaw = options.maxWidth == null ? 112 : Number(options.maxWidth)
+  const maxW = Number.isFinite(maxWRaw) ? Math.min(200, Math.max(48, Math.round(maxWRaw))) : 112
+
+  const info = await getVideoFileInfo(inputPath)
+  let duration =
+    info && Number.isFinite(info.durationSec) && info.durationSec > 0 ? info.durationSec : 0
+  if (duration <= 0 && options.durationSec != null) {
+    const d = Number(options.durationSec)
+    if (Number.isFinite(d) && d > 0 && d <= 86400) duration = d
+  }
+  if (duration <= 0) {
+    const one = await getVideoThumbnailDataUrl(inputPath)
+    return one.success && one.dataUrl
+      ? { success: true, dataUrls: [one.dataUrl] }
+      : { success: false, error: one.error ?? 'no duration' }
+  }
+
+  const { ffmpeg: ffmpegPath } = getFfmpegPathsForRuntime()
+  const run = (args: string[]) =>
+    execFileAsync(ffmpegPath, args, {
+      windowsHide: true,
+      maxBuffer: 40 * 1024 * 1024,
+    })
+
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'picaflux-vfilm-'))
+  const outPattern = path.join(tmpDir, 'thumb-%03d.png')
+
+  const fpsNum = count
+  const fpsDen = Math.max(duration, 0.001)
+  const vf = `fps=${fpsNum}/${fpsDen},scale=${maxW}:-1:flags=fast_bilinear`
+
+  const readThumbsSorted = async (): Promise<string[]> => {
+    const names = (await fs.readdir(tmpDir)).filter((n) => /^thumb-\d+\.png$/i.test(n))
+    names.sort((a, b) => {
+      const na = parseInt(a.replace(/\D/g, ''), 10)
+      const nb = parseInt(b.replace(/\D/g, ''), 10)
+      return na - nb
+    })
+    const urls: string[] = []
+    for (const n of names) {
+      const buf = await fs.readFile(path.join(tmpDir, n))
+      urls.push(`data:image/png;base64,${buf.toString('base64')}`)
+    }
+    return urls
+  }
+
+  const extractSequential = async (): Promise<string[]> => {
+    const urls: string[] = []
+    const step = duration / count
+    for (let i = 0; i < count; i++) {
+      const t = Math.min(duration - 0.001, Math.max(0, (i + 0.5) * step))
+      const oneDir = await fs.mkdtemp(path.join(os.tmpdir(), 'picaflux-vfilm1-'))
+      const outPath = path.join(oneDir, 'f.png')
+      try {
+        try {
+          await run([
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-y',
+            '-ss',
+            String(t),
+            '-i',
+            inputPath,
+            '-frames:v',
+            '1',
+            '-vf',
+            `scale=${maxW}:-1:flags=fast_bilinear`,
+            '-q:v',
+            '5',
+            outPath,
+          ])
+        } catch {
+          await run([
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-y',
+            '-i',
+            inputPath,
+            '-ss',
+            String(t),
+            '-frames:v',
+            '1',
+            '-vf',
+            `scale=${maxW}:-1:flags=fast_bilinear`,
+            '-q:v',
+            '5',
+            outPath,
+          ])
+        }
+        const buf = await fs.readFile(outPath)
+        urls.push(`data:image/png;base64,${buf.toString('base64')}`)
+      } catch {
+        /* skip frame */
+      } finally {
+        await fs.rm(oneDir, { recursive: true, force: true }).catch(() => {})
+      }
+    }
+    return urls
+  }
+
+  try {
+    await run([
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-y',
+      '-i',
+      inputPath,
+      '-vf',
+      vf,
+      '-frames:v',
+      String(count),
+      outPattern,
+    ])
+    let urls = await readThumbsSorted()
+    if (urls.length === 0) {
+      urls = await extractSequential()
+    }
+    if (urls.length === 0) {
+      return { success: false, error: 'no frames' }
+    }
+    return { success: true, dataUrls: urls }
+  } catch (e) {
+    const urls = await extractSequential()
+    if (urls.length > 0) {
+      return { success: true, dataUrls: urls }
+    }
+    const msg = e instanceof Error ? e.message : String(e)
+    return { success: false, error: msg }
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
 function parsedBase(inputPath: string): { name: string; ext: string } {
   const p = path.parse(inputPath)
   return { name: p.name, ext: p.ext }

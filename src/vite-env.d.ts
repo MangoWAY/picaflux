@@ -87,6 +87,14 @@ interface Window {
       dataUrl?: string
       error?: string
     }>
+    getVideoTimelineThumbnails: (
+      filePath: string,
+      opts: { count: number; durationSec?: number; maxWidth?: number },
+    ) => Promise<{
+      success: boolean
+      dataUrls?: string[]
+      error?: string
+    }>
     cancelVideoTask: (taskId: string) => Promise<boolean>
     listVideoProcessPresets: () => Promise<import('./lib/videoPreset').VideoProcessPresetRecord[]>
     saveVideoProcessPreset: (payload: {

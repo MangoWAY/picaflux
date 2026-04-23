@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import type { VideoWorkbenchMode } from '@/lib/videoFormPayload'
 
@@ -36,6 +36,8 @@ type TimelineMode = Extract<VideoWorkbenchMode, 'trim' | 'gif' | 'webp_anim' | '
 export interface VideoTimelineProps {
   mode: TimelineMode
   videoEl: HTMLVideoElement | null
+  /** 当前预览视频绝对路径，用于主进程抽取时间轴胶片帧 */
+  filmstripVideoPath?: string | null
   durationSec?: number
   startSecStr: string
   durationSecStr: string
@@ -49,6 +51,7 @@ type DragKind = 'none' | 'playhead' | 'start' | 'end' | 'time'
 export function VideoTimeline({
   mode,
   videoEl,
+  filmstripVideoPath,
   durationSec,
   startSecStr,
   durationSecStr,
@@ -61,6 +64,25 @@ export function VideoTimeline({
   const [currentTime, setCurrentTime] = useState<number>(0)
   const [hoverSec, setHoverSec] = useState<number | null>(null)
   const dragRef = useRef<{ kind: DragKind; pointerId: number } | null>(null)
+  const [trackWidth, setTrackWidth] = useState(0)
+  const [debouncedTrackWidth, setDebouncedTrackWidth] = useState(0)
+  const [filmstripUrls, setFilmstripUrls] = useState<string[] | null>(null)
+
+  useLayoutEffect(() => {
+    const el = trackRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      setTrackWidth(el.getBoundingClientRect().width)
+    })
+    ro.observe(el)
+    setTrackWidth(el.getBoundingClientRect().width)
+    return () => ro.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedTrackWidth(trackWidth), 200)
+    return () => clearTimeout(id)
+  }, [trackWidth])
 
   const dur = useMemo(() => {
     const d =
@@ -110,6 +132,37 @@ export function VideoTimeline({
       videoEl.removeEventListener('durationchange', onDuration)
     }
   }, [videoEl])
+
+  useEffect(() => {
+    if (!filmstripVideoPath || disabled) {
+      setFilmstripUrls(null)
+      return
+    }
+    const d = dur
+    if (d <= 0 || debouncedTrackWidth < 48) {
+      setFilmstripUrls(null)
+      return
+    }
+    const count = Math.min(40, Math.max(8, Math.ceil(debouncedTrackWidth / 52)))
+    let cancelled = false
+    setFilmstripUrls(null)
+    void (async () => {
+      const r = await window.picafluxAPI.getVideoTimelineThumbnails(filmstripVideoPath, {
+        count,
+        durationSec: d,
+        maxWidth: 108,
+      })
+      if (cancelled) return
+      if (r.success && r.dataUrls && r.dataUrls.length > 0) {
+        setFilmstripUrls(r.dataUrls)
+      } else {
+        setFilmstripUrls([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [filmstripVideoPath, dur, debouncedTrackWidth, disabled])
 
   useEffect(() => {
     if (!videoEl) return
@@ -253,7 +306,7 @@ export function VideoTimeline({
         <div
           ref={trackRef}
           className={clsx(
-            'relative h-10 w-full select-none rounded-md bg-[#1a1a1a]',
+            'relative h-14 w-full select-none overflow-hidden rounded-md',
             disabled ? 'opacity-60' : 'cursor-pointer',
           )}
           onMouseMove={(e) => {
@@ -271,23 +324,45 @@ export function VideoTimeline({
             else setVideoTime(sec)
           }}
         >
+          {filmstripUrls && filmstripUrls.length > 0 ? (
+            <div className="pointer-events-none absolute inset-0 z-0 flex">
+              {filmstripUrls.map((url, i) => (
+                <img
+                  key={`${filmstripVideoPath ?? 'v'}-${i}`}
+                  src={url}
+                  alt=""
+                  draggable={false}
+                  className="h-full min-w-0 flex-1 object-cover"
+                />
+              ))}
+            </div>
+          ) : filmstripUrls === null &&
+            filmstripVideoPath &&
+            dur > 0 &&
+            debouncedTrackWidth >= 48 &&
+            !disabled ? (
+            <div className="pointer-events-none absolute inset-0 z-0 animate-pulse bg-[#222]" />
+          ) : (
+            <div className="pointer-events-none absolute inset-0 z-0 bg-[#1a1a1a]" />
+          )}
+          <div className="pointer-events-none absolute inset-0 z-[1] bg-black/30" />
           {[0, 0.25, 0.5, 0.75, 1].map((r, i) => (
             <div
               key={i}
-              className="pointer-events-none absolute bottom-0 top-0 w-px bg-white/12"
+              className="pointer-events-none absolute bottom-0 top-0 z-[1] w-px bg-white/15"
               style={{ left: `${r * 100}%` }}
             />
           ))}
           {isTrim ? (
             <div
-              className="absolute inset-y-0 rounded-md bg-blue-500/20"
+              className="pointer-events-none absolute inset-y-0 z-[2] rounded-sm bg-blue-500/30"
               style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
             />
           ) : null}
 
           <div
             className={clsx(
-              'absolute inset-y-1 w-[2px] rounded bg-white/70',
+              'absolute inset-y-1 z-[3] w-[2px] rounded bg-white/90 shadow',
               disabled ? '' : 'cursor-ew-resize',
             )}
             style={{ left: `${mode === 'extract_frame' ? timePct : playPct}%` }}
@@ -299,8 +374,8 @@ export function VideoTimeline({
             <>
               <div
                 className={clsx(
-                  'absolute inset-y-0 w-3 -translate-x-1/2 rounded-md bg-blue-500/70 shadow',
-                  disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/80',
+                  'absolute inset-y-0 z-[4] w-3 -translate-x-1/2 rounded-md bg-blue-500/85 shadow',
+                  disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/90',
                 )}
                 style={{ left: `${startPct}%` }}
                 onPointerDown={(e) => onPointerDown(e, 'start')}
@@ -308,8 +383,8 @@ export function VideoTimeline({
               />
               <div
                 className={clsx(
-                  'absolute inset-y-0 w-3 -translate-x-1/2 rounded-md bg-blue-500/70 shadow',
-                  disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/80',
+                  'absolute inset-y-0 z-[4] w-3 -translate-x-1/2 rounded-md bg-blue-500/85 shadow',
+                  disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/90',
                 )}
                 style={{ left: `${endPct}%` }}
                 onPointerDown={(e) => onPointerDown(e, 'end')}
