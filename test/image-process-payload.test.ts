@@ -31,7 +31,7 @@ function baseOptions(over: Partial<ProcessOptions> = {}): ProcessOptions {
     width: '',
     height: '',
     keepAspectRatio: true,
-    quality: 80,
+    quality: 100,
     outputDir: '/out',
     overwriteOriginal: false,
     removeBackground: false,

@@ -75,7 +75,7 @@ export function ImageWorkbench({
     width: '',
     height: '',
     keepAspectRatio: true,
-    quality: 80,
+    quality: 100,
     outputDir: '',
     overwriteOriginal: false,
     removeBackground: false,

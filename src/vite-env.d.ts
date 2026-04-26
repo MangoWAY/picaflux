@@ -96,6 +96,16 @@ interface Window {
       error?: string
     }>
     cancelVideoTask: (taskId: string) => Promise<boolean>
+    saveVideoPreviewFrame: (payload: {
+      inputPath: string
+      timeSec: number
+      defaultFileName: string
+    }) => Promise<{
+      success: boolean
+      canceled?: boolean
+      outputPath?: string
+      error?: string
+    }>
     listVideoProcessPresets: () => Promise<import('./lib/videoPreset').VideoProcessPresetRecord[]>
     saveVideoProcessPreset: (payload: {
       name: string

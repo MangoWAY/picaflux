@@ -52,7 +52,7 @@ export const DEFAULT_IMAGE_PRESET_STORED: ImageProcessPresetStored = {
   width: '',
   height: '',
   keepAspectRatio: true,
-  quality: 80,
+  quality: 100,
   overwriteOriginal: false,
   removeBackground: false,
   clearFixedWatermark: false,

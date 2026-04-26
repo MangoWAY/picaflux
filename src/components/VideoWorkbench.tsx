@@ -7,7 +7,9 @@ import { ChevronRight } from 'lucide-react'
 import {
   buildVideoProcessPayload,
   createEmptyModeEnabled,
+  formatDurationSecStr,
   listEnabledModesInOrder,
+  shouldPrependImplicitTrim,
   type VideoProcessFormState,
 } from '@/lib/videoFormPayload'
 import type { VideoProcessPresetRecord } from '@/lib/videoPreset'
@@ -51,6 +53,8 @@ const defaultForm: VideoProcessFormState = {
   modeEnabled: createEmptyModeEnabled(),
   outputDir: '',
   transcodePreset: 'web_mp4',
+  transcodeQualityTier: 'medium',
+  transcodeCrfStr: '23',
   maxWidthStr: '1280',
   startSecStr: '0',
   durationSecStr: '10',
@@ -62,10 +66,10 @@ const defaultForm: VideoProcessFormState = {
   gifFpsStr: '10',
   gifMaxWidthStr: '480',
   webpQualityStr: '75',
-  videoTransformEnabled: true,
+  videoTransformEnabled: false,
   videoRotation: '0',
   videoFlip: 'none',
-  playbackSpeedStr: '1.5',
+  playbackSpeedStr: '1',
 }
 
 export function VideoWorkbench() {
@@ -107,6 +111,24 @@ export function VideoWorkbench() {
       return next
     })
   }, [videoPathsKey])
+
+  const previewDurationSec = useMemo(() => {
+    if (!previewPath) return undefined
+    const v = videos.find((x) => x.path === previewPath)
+    return v?.durationSec
+  }, [previewPath, videos])
+
+  useEffect(() => {
+    if (
+      previewDurationSec == null ||
+      !Number.isFinite(previewDurationSec) ||
+      previewDurationSec <= 0
+    ) {
+      return
+    }
+    const durStr = formatDurationSecStr(previewDurationSec)
+    setForm((f) => ({ ...f, startSecStr: '0', durationSecStr: durStr }))
+  }, [previewPath, previewDurationSec])
 
   useEffect(() => {
     return window.picafluxAPI.subscribeVideoTaskProgress(({ taskId, percent }) => {
@@ -290,6 +312,15 @@ export function VideoWorkbench() {
     const hasConcat = enabledModes.includes('concat')
     if (hasConcat && batch.length < 2) return
 
+    const modesCountForFile = (v: (typeof batch)[number]) => {
+      let m = [...modesPerFile]
+      if (shouldPrependImplicitTrim(form, v.durationSec, m) && !m.includes('trim')) {
+        m = ['trim', ...m]
+      }
+      return m.length
+    }
+    const totalSteps = batch.reduce((acc, v) => acc + modesCountForFile(v), 0) + (hasConcat ? 1 : 0)
+
     setIsProcessing(true)
     setVideos((prev) =>
       prev.map((v) =>
@@ -299,7 +330,6 @@ export function VideoWorkbench() {
       ),
     )
 
-    const totalSteps = modesPerFile.length * batch.length + (hasConcat ? 1 : 0)
     let step = 0
 
     const markVideoResult = (path: string, success: boolean, err?: string) => {
@@ -334,23 +364,31 @@ export function VideoWorkbench() {
       for (const v of batch) {
         let fileOk = true
         let fileErr: string | undefined
-        for (const mode of modesPerFile) {
+        let modes = [...modesPerFile]
+        if (shouldPrependImplicitTrim(form, v.durationSec, modes) && !modes.includes('trim')) {
+          modes = ['trim', ...modes]
+        }
+        let chainInput = v.path
+        for (const mode of modes) {
           step += 1
           setBatchProgress({ current: step, total: totalSteps })
           const taskId = newTaskId()
           activeTaskIdRef.current = taskId
           setProgressPercent(0)
           const payload = buildVideoProcessPayload(form, mode)
+          const inputPath = mode === 'gif' || mode === 'webp_anim' ? v.path : chainInput
           try {
             const result = await window.picafluxAPI.processVideo(
               taskId,
-              v.path,
+              inputPath,
               form.outputDir,
               payload,
             )
             if (!result.success) {
               fileOk = false
               fileErr = result.error ?? '处理失败'
+            } else if (result.outputPath && mode !== 'gif' && mode !== 'webp_anim') {
+              chainInput = result.outputPath
             }
           } catch {
             fileOk = false

@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react'
-import { UploadCloud } from 'lucide-react'
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Aperture, ChevronDown, ChevronUp, UploadCloud } from 'lucide-react'
 import type { VideoFile } from './VideoStrip'
-import { resolveTimelineMode, type VideoProcessFormState } from '@/lib/videoFormPayload'
+import type { VideoProcessFormState } from '@/lib/videoFormPayload'
 import { VideoTimeline } from './VideoTimeline'
 
 const VIDEO_EXT = /\.(mp4|mov|mkv|webm|m4v|avi|mpeg|mpg)$/i
@@ -31,6 +31,20 @@ function formatBitrate(bps?: number): string {
   return `${mbps.toFixed(2)} Mbps`
 }
 
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n))
+}
+
+/** 用于默认保存文件名中的时间片段 */
+function formatTimeForFilename(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return '0s'
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  const ms = Math.floor((sec % 1) * 1000)
+  if (ms > 0) return `${m}m${s}s${String(ms).padStart(3, '0')}`
+  return `${m}m${s}s`
+}
+
 interface VideoPreviewPaneProps {
   videos: VideoFile[]
   previewVideo: VideoFile | null
@@ -56,6 +70,13 @@ export function VideoPreviewPane({
   onNavigatePreview,
 }: VideoPreviewPaneProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const [savingFrame, setSavingFrame] = useState(false)
+  /** 预览区底部媒体信息卡：默认展开 */
+  const [videoMetaExpanded, setVideoMetaExpanded] = useState(true)
+
+  useEffect(() => {
+    setVideoMetaExpanded(true)
+  }, [previewVideo?.path])
 
   const collectPathsFromDataTransfer = useCallback((dt: DataTransfer): string[] => {
     const paths: string[] = []
@@ -95,8 +116,7 @@ export function VideoPreviewPane({
   )
 
   const src = previewVideo?.previewUrl
-  const timelineMode = resolveTimelineMode(form)
-  const showTimeline = Boolean(previewVideo && timelineMode != null)
+  const showTimeline = Boolean(previewVideo)
 
   useEffect(() => {
     if (!onNavigatePreview || videos.length === 0) return
@@ -160,6 +180,61 @@ export function VideoPreviewPane({
     return base
   }, [videos.length, selectedCount, showTimeline])
 
+  /** 信息卡两行「标签：值」；路径仅在顶栏，悬停可看含路径的完整说明 */
+  const previewMetaLines = useMemo(() => {
+    if (!previewVideo) return null
+    const v = previewVideo
+    const res = v.width && v.height ? `${v.width}×${v.height}` : '—'
+    const row1: { label: string; value: string }[] = [
+      { label: '分辨率', value: res },
+      { label: '时长', value: formatDuration(v.durationSec) },
+      { label: '体积', value: formatSize(v.size) },
+    ]
+    if (v.formatName) row1.push({ label: '封装', value: v.formatName })
+    row1.push({
+      label: '编码',
+      value: `${v.videoCodec ?? '—'} / ${v.audioCodec ?? '—'}`,
+    })
+    const row2: { label: string; value: string }[] = [
+      { label: '视频码率', value: formatBitrate(v.videoBitRateBps) },
+      { label: '音频码率', value: formatBitrate(v.audioBitRateBps) },
+      { label: '合计码率', value: formatBitrate(v.bitRateBps) },
+    ]
+    const title = [
+      row1.map((s) => `${s.label}：${s.value}`).join(' · '),
+      row2.map((s) => `${s.label}：${s.value}`).join(' · '),
+      v.path,
+    ].join('\n')
+    return { row1, row2, title }
+  }, [previewVideo])
+
+  const onSavePreviewFrame = useCallback(async () => {
+    const el = videoRef.current
+    if (!previewVideo || !el || savingFrame) return
+    const dur = el.duration
+    let t = el.currentTime
+    if (Number.isFinite(dur) && dur > 0) {
+      t = clamp(t, 0, dur)
+    } else {
+      t = Math.max(0, t)
+    }
+    const stem = previewVideo.name.replace(/\.[^/.]+$/, '') || 'frame'
+    const defaultFileName = `${stem}_${formatTimeForFilename(t)}.png`
+    setSavingFrame(true)
+    try {
+      const r = await window.picafluxAPI.saveVideoPreviewFrame({
+        inputPath: previewVideo.path,
+        timeSec: t,
+        defaultFileName,
+      })
+      if (!r.success && !r.canceled && r.error) {
+        window.alert(r.error)
+      }
+    } finally {
+      setSavingFrame(false)
+    }
+  }, [previewVideo, savingFrame])
+
   return (
     <div
       className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-[#121212]"
@@ -196,8 +271,30 @@ export function VideoPreviewPane({
             <p className="text-sm text-gray-400">拖入视频或点击添加</p>
           </div>
         ) : previewVideo ? (
-          <div className="flex h-full min-h-0 flex-col gap-3">
+          <div className="flex h-full min-h-0 flex-col gap-2">
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#0d0d0d] p-3">
+              <div className="flex min-w-0 shrink-0 items-center justify-between gap-3">
+                <p
+                  className="min-w-0 flex-1 truncate text-[12px] leading-snug"
+                  title={`${previewVideo.name}\n${previewVideo.path}`}
+                >
+                  <span className="font-semibold text-gray-200">{previewVideo.name}</span>
+                  <span className="select-none text-gray-700"> · </span>
+                  <span className="font-mono text-[11px] font-normal text-gray-500">
+                    {previewVideo.path}
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void onSavePreviewFrame()}
+                  disabled={isProcessing || savingFrame}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[#3d3d3d] bg-[#161616] px-2.5 py-1 text-[12px] font-medium text-gray-200 transition-colors hover:border-blue-500/35 hover:bg-[#1c1c1c] disabled:cursor-not-allowed disabled:opacity-45"
+                  title="保存当前播放时刻的画面（PNG / JPEG）"
+                >
+                  <Aperture className="h-3.5 w-3.5 text-gray-400" aria-hidden />
+                  {savingFrame ? '导出中…' : '截帧'}
+                </button>
+              </div>
               <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
                 <video
                   ref={videoRef}
@@ -207,16 +304,14 @@ export function VideoPreviewPane({
                   className="max-h-full max-w-full rounded-lg bg-black object-contain shadow-[0_0_0_1px_rgba(255,255,255,0.06)]"
                 />
               </div>
-              {showTimeline && timelineMode ? (
+              {showTimeline ? (
                 <div className="shrink-0 border-t border-[#2a2a2a] pt-3">
                   <VideoTimeline
-                    mode={timelineMode}
                     videoEl={videoRef.current}
                     filmstripVideoPath={previewVideo.path}
                     durationSec={previewVideo.durationSec}
                     startSecStr={form.startSecStr}
                     durationSecStr={form.durationSecStr}
-                    timeSecStr={form.timeSecStr}
                     disabled={isProcessing}
                     onChange={(patch) => {
                       onFormChange({ ...form, ...patch })
@@ -224,57 +319,73 @@ export function VideoPreviewPane({
                   />
                 </div>
               ) : null}
-              <p className="shrink-0 text-center text-[10px] text-gray-600">
-                Space 播放/暂停 · J／K／L 快退/暂停/快进 · 时间轴可用控件拖动
-              </p>
             </div>
 
-            <div className="shrink-0 space-y-2 text-sm text-gray-400">
-              <p className="truncate font-medium text-gray-200" title={previewVideo.name}>
-                {previewVideo.name}
-              </p>
-              <p className="text-xs text-gray-500">
-                {previewVideo.width && previewVideo.height
-                  ? `${previewVideo.width}×${previewVideo.height}`
-                  : '—'}{' '}
-                · {formatDuration(previewVideo.durationSec)} · {formatSize(previewVideo.size)}
-                {previewVideo.formatName ? ` · ${previewVideo.formatName}` : ''}
-              </p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
-                <div>
-                  <span className="text-gray-600">视频编码</span>
-                  <p className="truncate text-gray-300" title={previewVideo.videoCodec ?? ''}>
-                    {previewVideo.videoCodec ?? '—'}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-gray-600">音频编码</span>
-                  <p className="truncate text-gray-300" title={previewVideo.audioCodec ?? ''}>
-                    {previewVideo.audioCodec ?? '—'}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-gray-600">总码率</span>
-                  <p className="text-gray-300">{formatBitrate(previewVideo.bitRateBps)}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600">视频 / 音频码率</span>
-                  <p className="text-gray-300">
-                    {formatBitrate(previewVideo.videoBitRateBps)} /{' '}
-                    {formatBitrate(previewVideo.audioBitRateBps)}
-                  </p>
-                </div>
-                <div className="sm:col-span-2">
-                  <span className="text-gray-600">路径</span>
-                  <p
-                    className="truncate font-mono text-[11px] text-gray-400"
-                    title={previewVideo.path}
+            {previewMetaLines ? (
+              <div
+                role="region"
+                aria-label="媒体信息"
+                className="shrink-0 rounded-lg border border-[#2a2a2a] bg-[#141414]"
+              >
+                <div
+                  className={`flex min-w-0 items-start gap-1.5 px-2.5 py-1.5 ${videoMetaExpanded ? '' : 'justify-end py-1'}`}
+                >
+                  <div
+                    id="video-preview-meta-details"
+                    hidden={!videoMetaExpanded}
+                    className="min-w-0 flex-1 space-y-0.5"
                   >
-                    {previewVideo.path}
-                  </p>
+                    <p
+                      className="min-w-0 truncate text-[11px] leading-snug"
+                      title={previewMetaLines.title}
+                    >
+                      {previewMetaLines.row1.map((s, i) => (
+                        <Fragment key={`${s.label}-${i}`}>
+                          {i > 0 ? <span className="select-none text-gray-700"> · </span> : null}
+                          <span className="text-gray-600">{s.label}：</span>
+                          <span className="tabular-nums text-gray-400">{s.value}</span>
+                        </Fragment>
+                      ))}
+                    </p>
+                    <p
+                      className="min-w-0 truncate text-[11px] leading-snug"
+                      title={previewMetaLines.title}
+                    >
+                      {previewMetaLines.row2.map((s, i) => (
+                        <Fragment key={`${s.label}-${i}`}>
+                          {i > 0 ? <span className="select-none text-gray-700"> · </span> : null}
+                          <span className="text-gray-600">{s.label}：</span>
+                          <span className="tabular-nums text-gray-400">{s.value}</span>
+                        </Fragment>
+                      ))}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    id="video-preview-meta-toggle"
+                    onClick={() => setVideoMetaExpanded((v) => !v)}
+                    aria-expanded={videoMetaExpanded}
+                    aria-controls="video-preview-meta-details"
+                    aria-label={videoMetaExpanded ? '收起媒体信息' : '展开媒体信息'}
+                    title={videoMetaExpanded ? '收起媒体信息' : '展开媒体信息'}
+                    className={
+                      videoMetaExpanded
+                        ? 'shrink-0 rounded p-0.5 text-gray-500 transition-colors hover:bg-[#252525] hover:text-gray-300'
+                        : 'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-gray-500 transition-colors hover:bg-[#252525] hover:text-gray-300'
+                    }
+                  >
+                    {videoMetaExpanded ? (
+                      <ChevronDown className="h-4 w-4" aria-hidden />
+                    ) : (
+                      <>
+                        <ChevronUp className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        <span aria-hidden>媒体信息</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
-            </div>
+            ) : null}
           </div>
         ) : (
           <div className="flex h-full items-center justify-center text-gray-500">

@@ -46,8 +46,14 @@ export interface ProcessVideoOptions {
   /** 顺时针旋转角度，仅允许 0 / 90 / 180 / 270 */
   videoRotationDeg?: number
   videoFlip?: VideoFlipOption
-  /** 播放倍速，如 2=两倍速，0.5=半速 */
+  /** 播放倍速，如 2=两倍速，0.5=半速；变速模式会限制在 0.1–8 */
   playbackSpeed?: number
+  /** libx264 CRF（重编码时）；流拷贝忽略 */
+  videoCrf?: number
+  /** x264 -preset，如 fast、slow */
+  x264Preset?: string
+  /** AAC 音频码率，如 128k */
+  audioBitrateAac?: string
 }
 
 export interface SanitizedVideoOptions {
@@ -67,6 +73,9 @@ export interface SanitizedVideoOptions {
   videoRotationDeg: 0 | 90 | 180 | 270
   videoFlip: VideoFlipOption
   playbackSpeed: number
+  videoCrf: number
+  x264Preset: string
+  audioBitrateAac: string
 }
 
 const MODES: ReadonlySet<ProcessVideoMode> = new Set([
@@ -84,12 +93,33 @@ const MODES: ReadonlySet<ProcessVideoMode> = new Set([
 const FLIPS: ReadonlySet<VideoFlipOption> = new Set(['none', 'horizontal', 'vertical', 'both'])
 
 const PSETS: ReadonlySet<TranscodePreset> = new Set(['web_mp4', 'copy_streams', 'high_quality_mp4'])
+
+const X264_PRESETS = new Set([
+  'ultrafast',
+  'superfast',
+  'veryfast',
+  'faster',
+  'fast',
+  'medium',
+  'slow',
+  'slower',
+  'veryslow',
+])
 const AFORMATS: ReadonlySet<AudioExtractFormat> = new Set(['aac', 'mp3', 'wav'])
 const FFMT: ReadonlySet<FrameImageFormat> = new Set(['png', 'jpeg'])
 
 function num(v: unknown, fallback: number, min: number, max: number): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) return fallback
-  return Math.min(max, Math.max(min, v))
+  let n: number
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    n = v
+  } else if (typeof v === 'string') {
+    const p = parseFloat(String(v).trim().replace(',', '.'))
+    n = Number.isFinite(p) ? p : NaN
+  } else {
+    return fallback
+  }
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(max, Math.max(min, n))
 }
 
 export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions {
@@ -105,7 +135,7 @@ export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions
     transcodePreset = d.transcodePreset as TranscodePreset
   }
 
-  const maxWidth = Math.round(num(d.maxWidth, 0, 0, 7680))
+  let maxWidth = Math.round(num(d.maxWidth, 0, 0, 7680))
   const startSec = num(d.startSec, 0, 0, 86400 * 7)
   let durationSec = num(d.durationSec, 0, 0, 86400)
   const timeSec = num(d.timeSec, 0, 0, 86400 * 7)
@@ -152,8 +182,9 @@ export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions
   if (mode === 'concat' && transcodePreset === 'copy_streams') {
     transcodePreset = 'web_mp4'
   }
-  if (mode === 'speed' && transcodePreset === 'copy_streams') {
+  if (mode === 'speed') {
     transcodePreset = 'web_mp4'
+    maxWidth = 0
   }
 
   const playbackRaw =
@@ -162,7 +193,32 @@ export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions
       : typeof d.playbackSpeed === 'string'
         ? parseFloat(String(d.playbackSpeed).replace(',', '.'))
         : NaN
-  const playbackSpeed = Number.isFinite(playbackRaw) ? Math.min(4, Math.max(0.25, playbackRaw)) : 1
+  const playbackSpeed = Number.isFinite(playbackRaw) ? Math.min(8, Math.max(0.1, playbackRaw)) : 1
+
+  const crfNum = (() => {
+    const v = d.videoCrf
+    if (typeof v === 'number' && Number.isFinite(v)) return Math.round(v)
+    if (typeof v === 'string') {
+      const n = parseFloat(String(v).trim().replace(',', '.'))
+      return Number.isFinite(n) ? Math.round(n) : NaN
+    }
+    return NaN
+  })()
+  let videoCrf = Number.isFinite(crfNum) ? crfNum : 23
+  videoCrf = Math.min(40, Math.max(16, videoCrf))
+
+  const presetRaw = typeof d.x264Preset === 'string' ? d.x264Preset.trim() : ''
+  let x264Preset = X264_PRESETS.has(presetRaw) ? presetRaw : 'fast'
+
+  const abRaw = typeof d.audioBitrateAac === 'string' ? d.audioBitrateAac.trim().toLowerCase() : ''
+  let audioBitrateAac = /^[1-9]\d*k$/.test(abRaw) ? abRaw : '128k'
+
+  if (transcodePreset === 'high_quality_mp4') {
+    transcodePreset = 'web_mp4'
+    videoCrf = 20
+    x264Preset = 'slow'
+    audioBitrateAac = '192k'
+  }
 
   return {
     mode,
@@ -181,5 +237,8 @@ export function sanitizeProcessVideoOptions(raw: unknown): SanitizedVideoOptions
     videoRotationDeg,
     videoFlip,
     playbackSpeed,
+    videoCrf,
+    x264Preset,
+    audioBitrateAac,
   }
 }

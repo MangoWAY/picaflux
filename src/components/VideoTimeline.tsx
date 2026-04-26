@@ -1,7 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import type { VideoWorkbenchMode } from '@/lib/videoFormPayload'
-
 function isFiniteNonNeg(n: unknown): n is number {
   return typeof n === 'number' && Number.isFinite(n) && n >= 0
 }
@@ -31,31 +29,25 @@ function formatClock(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-type TimelineMode = Extract<VideoWorkbenchMode, 'trim' | 'gif' | 'webp_anim' | 'extract_frame'>
-
 export interface VideoTimelineProps {
-  mode: TimelineMode
   videoEl: HTMLVideoElement | null
   /** 当前预览视频绝对路径，用于主进程抽取时间轴胶片帧 */
   filmstripVideoPath?: string | null
   durationSec?: number
   startSecStr: string
   durationSecStr: string
-  timeSecStr: string
-  onChange: (next: { startSecStr?: string; durationSecStr?: string; timeSecStr?: string }) => void
+  onChange: (next: { startSecStr?: string; durationSecStr?: string }) => void
   disabled?: boolean
 }
 
-type DragKind = 'none' | 'playhead' | 'start' | 'end' | 'time'
+type DragKind = 'none' | 'playhead' | 'start' | 'end'
 
 export function VideoTimeline({
-  mode,
   videoEl,
   filmstripVideoPath,
   durationSec,
   startSecStr,
   durationSecStr,
-  timeSecStr,
   onChange,
   disabled,
 }: VideoTimelineProps) {
@@ -108,11 +100,6 @@ export function VideoTimeline({
     if (dur <= 0) return raw
     return clamp(raw, 0, dur)
   }, [dur, startSec, clipDurationSec])
-
-  const timeSec = useMemo(() => {
-    if (dur <= 0) return parseSecStr(timeSecStr, 0)
-    return clamp(parseSecStr(timeSecStr, 0), 0, dur)
-  }, [dur, timeSecStr])
 
   useEffect(() => {
     if (!videoEl) return
@@ -207,13 +194,6 @@ export function VideoTimeline({
     if (typeof seekTo === 'number') setVideoTime(clamp(seekTo, 0, d))
   }
 
-  const updateTime = (t: number, seek = true) => {
-    const d = dur > 0 ? dur : t
-    const nt = clamp(t, 0, d)
-    onChange({ timeSecStr: formatSec(nt) })
-    if (seek) setVideoTime(nt)
-  }
-
   const onPointerDown = (e: React.PointerEvent, kind: DragKind) => {
     if (disabled) return
     if (!trackRef.current) return
@@ -229,11 +209,6 @@ export function VideoTimeline({
     if (!drag || drag.pointerId !== e.pointerId) return
     if (disabled) return
     const sec = pxToSec(e.clientX)
-
-    if (mode === 'extract_frame') {
-      updateTime(sec)
-      return
-    }
 
     if (drag.kind === 'playhead') {
       setVideoTime(sec)
@@ -266,9 +241,6 @@ export function VideoTimeline({
   const startPct = (startSec / durSafe) * 100
   const endPct = (endSec / durSafe) * 100
   const playPct = (currentTime / durSafe) * 100
-  const timePct = (timeSec / durSafe) * 100
-
-  const isTrim = mode === 'trim' || mode === 'gif' || mode === 'webp_anim'
 
   return (
     <div className="w-full rounded-lg border border-[#2d2d2d] bg-[#101010] px-3 py-3">
@@ -279,19 +251,12 @@ export function VideoTimeline({
           <span className="text-gray-500">当前</span>
           <span className="text-gray-200">{formatClock(currentTime)}</span>
         </div>
-        {isTrim ? (
-          <div className="flex items-center gap-3">
-            <span className="text-gray-500">起点</span>
-            <span className="text-gray-200">{formatClock(startSec)}</span>
-            <span className="text-gray-500">终点</span>
-            <span className="text-gray-200">{formatClock(endSec)}</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <span className="text-gray-500">截取</span>
-            <span className="text-gray-200">{formatClock(timeSec)}</span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          <span className="text-gray-500">起点</span>
+          <span className="text-gray-200">{formatClock(startSec)}</span>
+          <span className="text-gray-500">终点</span>
+          <span className="text-gray-200">{formatClock(endSec)}</span>
+        </div>
       </div>
 
       <div className="relative">
@@ -320,8 +285,7 @@ export function VideoTimeline({
           onPointerDown={(e) => {
             if (disabled) return
             const sec = pxToSec(e.clientX)
-            if (mode === 'extract_frame') updateTime(sec)
-            else setVideoTime(sec)
+            setVideoTime(sec)
           }}
         >
           {filmstripUrls && filmstripUrls.length > 0 ? (
@@ -353,105 +317,73 @@ export function VideoTimeline({
               style={{ left: `${r * 100}%` }}
             />
           ))}
-          {isTrim ? (
-            <div
-              className="pointer-events-none absolute inset-y-0 z-[2] rounded-sm bg-blue-500/30"
-              style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
-            />
-          ) : null}
+          <div
+            className="pointer-events-none absolute inset-y-0 z-[2] rounded-sm bg-blue-500/30"
+            style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
+          />
 
           <div
             className={clsx(
               'absolute inset-y-1 z-[3] w-[2px] rounded bg-white/90 shadow',
               disabled ? '' : 'cursor-ew-resize',
             )}
-            style={{ left: `${mode === 'extract_frame' ? timePct : playPct}%` }}
-            onPointerDown={(e) => onPointerDown(e, mode === 'extract_frame' ? 'time' : 'playhead')}
-            title={mode === 'extract_frame' ? '拖动选择截帧时间' : '拖动跳转播放位置'}
+            style={{ left: `${playPct}%` }}
+            onPointerDown={(e) => onPointerDown(e, 'playhead')}
+            title="拖动跳转播放位置"
           />
 
-          {isTrim ? (
-            <>
-              <div
-                className={clsx(
-                  'absolute inset-y-0 z-[4] w-3 -translate-x-1/2 rounded-md bg-blue-500/85 shadow',
-                  disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/90',
-                )}
-                style={{ left: `${startPct}%` }}
-                onPointerDown={(e) => onPointerDown(e, 'start')}
-                title="拖动起点"
-              />
-              <div
-                className={clsx(
-                  'absolute inset-y-0 z-[4] w-3 -translate-x-1/2 rounded-md bg-blue-500/85 shadow',
-                  disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/90',
-                )}
-                style={{ left: `${endPct}%` }}
-                onPointerDown={(e) => onPointerDown(e, 'end')}
-                title="拖动终点"
-              />
-            </>
-          ) : null}
+          <div
+            className={clsx(
+              'absolute inset-y-0 z-[4] w-3 -translate-x-1/2 rounded-md bg-blue-500/85 shadow',
+              disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/90',
+            )}
+            style={{ left: `${startPct}%` }}
+            onPointerDown={(e) => onPointerDown(e, 'start')}
+            title="拖动起点"
+          />
+          <div
+            className={clsx(
+              'absolute inset-y-0 z-[4] w-3 -translate-x-1/2 rounded-md bg-blue-500/85 shadow',
+              disabled ? '' : 'cursor-ew-resize hover:bg-blue-400/90',
+            )}
+            style={{ left: `${endPct}%` }}
+            onPointerDown={(e) => onPointerDown(e, 'end')}
+            title="拖动终点"
+          />
         </div>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        {isTrim ? (
-          <>
-            <button
-              type="button"
-              disabled={disabled || !videoEl}
-              onClick={() => {
-                const t = isFiniteNonNeg(videoEl?.currentTime) ? (videoEl?.currentTime ?? 0) : 0
-                updateTrim(t, endSec, t)
-              }}
-              className="rounded-md border border-[#2d2d2d] bg-[#151515] px-2 py-1 text-[11px] text-gray-200 hover:bg-[#1e1e1e] disabled:opacity-50"
-            >
-              设为起点
-            </button>
-            <button
-              type="button"
-              disabled={disabled || !videoEl}
-              onClick={() => {
-                const t = isFiniteNonNeg(videoEl?.currentTime) ? (videoEl?.currentTime ?? 0) : 0
-                updateTrim(startSec, t, t)
-              }}
-              className="rounded-md border border-[#2d2d2d] bg-[#151515] px-2 py-1 text-[11px] text-gray-200 hover:bg-[#1e1e1e] disabled:opacity-50"
-            >
-              设为终点
-            </button>
-            <button
-              type="button"
-              disabled={disabled || dur <= 0}
-              onClick={() => updateTrim(0, Math.min(dur, 10), 0)}
-              className="ml-auto rounded-md border border-[#2d2d2d] bg-[#151515] px-2 py-1 text-[11px] text-gray-400 hover:bg-[#1e1e1e] disabled:opacity-50"
-            >
-              重置为 0–10s
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              disabled={disabled || !videoEl}
-              onClick={() => {
-                const t = isFiniteNonNeg(videoEl?.currentTime) ? (videoEl?.currentTime ?? 0) : 0
-                updateTime(t)
-              }}
-              className="rounded-md border border-[#2d2d2d] bg-[#151515] px-2 py-1 text-[11px] text-gray-200 hover:bg-[#1e1e1e] disabled:opacity-50"
-            >
-              设为当前帧
-            </button>
-            <button
-              type="button"
-              disabled={disabled || dur <= 0}
-              onClick={() => updateTime(0)}
-              className="ml-auto rounded-md border border-[#2d2d2d] bg-[#151515] px-2 py-1 text-[11px] text-gray-400 hover:bg-[#1e1e1e] disabled:opacity-50"
-            >
-              归零
-            </button>
-          </>
-        )}
+        <button
+          type="button"
+          disabled={disabled || !videoEl}
+          onClick={() => {
+            const t = isFiniteNonNeg(videoEl?.currentTime) ? (videoEl?.currentTime ?? 0) : 0
+            updateTrim(t, endSec, t)
+          }}
+          className="rounded-md border border-[#2d2d2d] bg-[#151515] px-2 py-1 text-[11px] text-gray-200 hover:bg-[#1e1e1e] disabled:opacity-50"
+        >
+          设为起点
+        </button>
+        <button
+          type="button"
+          disabled={disabled || !videoEl}
+          onClick={() => {
+            const t = isFiniteNonNeg(videoEl?.currentTime) ? (videoEl?.currentTime ?? 0) : 0
+            updateTrim(startSec, t, t)
+          }}
+          className="rounded-md border border-[#2d2d2d] bg-[#151515] px-2 py-1 text-[11px] text-gray-200 hover:bg-[#1e1e1e] disabled:opacity-50"
+        >
+          设为终点
+        </button>
+        <button
+          type="button"
+          disabled={disabled || dur <= 0}
+          onClick={() => updateTrim(0, dur, 0)}
+          className="ml-auto rounded-md border border-[#2d2d2d] bg-[#151515] px-2 py-1 text-[11px] text-gray-400 hover:bg-[#1e1e1e] disabled:opacity-50"
+        >
+          重置为整段
+        </button>
       </div>
     </div>
   )

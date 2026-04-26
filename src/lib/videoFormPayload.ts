@@ -13,6 +13,16 @@ export type VideoRotationUi = '0' | '90' | '180' | '270'
 
 export type VideoFlipUi = 'none' | 'horizontal' | 'vertical' | 'both'
 
+/** 压缩质量：低 / 中 / 高 / 自定义 CRF */
+export type TranscodeQualityTier = 'low' | 'medium' | 'high' | 'custom'
+
+/** 各档位对应 libx264 CRF（数值越大体积越小） */
+export const TRANSCODE_TIER_CRF: Record<Exclude<TranscodeQualityTier, 'custom'>, number> = {
+  low: 28,
+  medium: 23,
+  high: 20,
+}
+
 /** 各处理模式独立开关（可多项同时开启）；默认全关 */
 export type VideoModeEnabledMap = Record<VideoWorkbenchMode, boolean>
 
@@ -22,6 +32,10 @@ export interface VideoProcessFormState {
   modeEnabled: VideoModeEnabledMap
   outputDir: string
   transcodePreset: 'web_mp4' | 'copy_streams' | 'high_quality_mp4'
+  /** 压缩质量档位；合并仍使用 transcodePreset */
+  transcodeQualityTier: TranscodeQualityTier
+  /** 自定义档位时的 libx264 CRF（整数，约 18–32） */
+  transcodeCrfStr: string
   maxWidthStr: string
   startSecStr: string
   durationSecStr: string
@@ -39,7 +53,7 @@ export interface VideoProcessFormState {
   /** 顺时针旋转 */
   videoRotation: VideoRotationUi
   videoFlip: VideoFlipUi
-  /** 变速倍率（>1 快放，<1 慢放），主进程会限制在 0.25–4 */
+  /** 变速倍率（>1 快放，<1 慢放），主进程限制在 0.1–8 */
   playbackSpeedStr: string
 }
 
@@ -58,7 +72,15 @@ function parsePositiveInt(s: string, fallback: number): number {
 function parsePlaybackSpeed(s: string, fallback: number): number {
   const n = parseFloat(String(s).replace(',', '.'))
   if (!Number.isFinite(n) || n <= 0) return fallback
-  return n
+  return Math.min(8, Math.max(0.1, n))
+}
+
+/** libx264 CRF：常用 18–32，此处夹紧到 16–40 以防异常输入 */
+export function parseTranscodeCrf(s: string, fallback: number): number {
+  const n = Number.parseFloat(String(s).trim().replace(',', '.'))
+  if (!Number.isFinite(n)) return fallback
+  const r = Math.round(n)
+  return Math.min(40, Math.max(16, r))
 }
 
 export function createEmptyModeEnabled(): VideoModeEnabledMap {
@@ -75,14 +97,12 @@ export function createEmptyModeEnabled(): VideoModeEnabledMap {
   }
 }
 
-/** 批量执行时的顺序（合并放最后） */
+/** 批量执行时的顺序（合并放最后）；截帧改为预览区按钮，不在此队列 */
 export const VIDEO_PROCESSING_ORDER: readonly VideoWorkbenchMode[] = [
   'transcode',
   'speed',
   'trim',
-  'extract_frame',
   'gif',
-  'webp_anim',
   'audio_extract',
   'strip_audio',
   'concat',
@@ -92,16 +112,45 @@ export function listEnabledModesInOrder(modeEnabled: VideoModeEnabledMap): Video
   return VIDEO_PROCESSING_ORDER.filter((m) => modeEnabled[m])
 }
 
-/** 时间线 UI：多选时按固定优先级取一个 */
-export const TIMELINE_MODE_PRIORITY = ['extract_frame', 'trim', 'gif', 'webp_anim'] as const
+/** 与预览时间轴 `formatSec` 一致，用于整段时长写入表单 */
+export function formatDurationSecStr(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return '0'
+  const s = sec.toFixed(3).replace(/\.?0+$/, '')
+  return s === '-0' ? '0' : s
+}
 
-export type VideoTimelineUiMode = (typeof TIMELINE_MODE_PRIORITY)[number]
+const CLIP_EPS = 0.06
 
-export function resolveTimelineMode(state: VideoProcessFormState): VideoTimelineUiMode | null {
-  for (const m of TIMELINE_MODE_PRIORITY) {
-    if (state.modeEnabled[m]) return m
+/** 起点/终点是否未贴满整段（视为用户已做时间轴裁剪） */
+export function isClipShortenedVsDuration(
+  state: VideoProcessFormState,
+  fullDurationSec: number | undefined,
+): boolean {
+  if (fullDurationSec == null || !Number.isFinite(fullDurationSec) || fullDurationSec <= CLIP_EPS) {
+    return false
   }
-  return null
+  const start = parsePositiveFloat(state.startSecStr, 0)
+  const durParsed = parsePositiveFloat(state.durationSecStr, fullDurationSec)
+  const dur = durParsed > 0 ? durParsed : fullDurationSec
+  const end = start + dur
+  return start > CLIP_EPS || end < fullDurationSec - CLIP_EPS
+}
+
+const MODES_WITH_BUILTIN_TIMELINE_CLIP: ReadonlySet<VideoWorkbenchMode> = new Set(['gif'])
+
+/**
+ * 时间轴已缩短时，是否要在队列前插入独立 trim。
+ * gif 已在 ffmpeg 中按起止截取，无需前置 trim。
+ */
+export function shouldPrependImplicitTrim(
+  state: VideoProcessFormState,
+  fullDurationSec: number | undefined,
+  modes: readonly VideoWorkbenchMode[],
+): boolean {
+  if (!isClipShortenedVsDuration(state, fullDurationSec)) return false
+  const relevant = modes.filter((m) => m !== 'trim' && m !== 'concat')
+  if (relevant.length === 0) return false
+  return relevant.some((m) => !MODES_WITH_BUILTIN_TIMELINE_CLIP.has(m))
 }
 
 export function hasAnyModeEnabled(modeEnabled: VideoModeEnabledMap): boolean {
@@ -142,13 +191,43 @@ export function buildVideoProcessPayload(
   const base: Record<string, unknown> = { mode: modeForPayload }
 
   switch (modeForPayload) {
-    case 'transcode':
+    case 'transcode': {
+      const tier = state.transcodeQualityTier
+      const crfCustom = parseTranscodeCrf(state.transcodeCrfStr, TRANSCODE_TIER_CRF.medium)
+      const enc =
+        tier === 'low'
+          ? {
+              transcodePreset: 'web_mp4' as const,
+              videoCrf: TRANSCODE_TIER_CRF.low,
+              x264Preset: 'fast' as const,
+              audioBitrateAac: '96k' as const,
+            }
+          : tier === 'high'
+            ? {
+                transcodePreset: 'web_mp4' as const,
+                videoCrf: TRANSCODE_TIER_CRF.high,
+                x264Preset: 'slow' as const,
+                audioBitrateAac: '192k' as const,
+              }
+            : tier === 'custom'
+              ? {
+                  transcodePreset: 'web_mp4' as const,
+                  videoCrf: crfCustom,
+                  x264Preset: 'fast' as const,
+                  audioBitrateAac: '128k' as const,
+                }
+              : {
+                  transcodePreset: 'web_mp4' as const,
+                  videoCrf: TRANSCODE_TIER_CRF.medium,
+                  x264Preset: 'fast' as const,
+                  audioBitrateAac: '128k' as const,
+                }
       return {
         ...base,
-        transcodePreset: state.transcodePreset,
-        ...(maxWidth > 0 ? { maxWidth } : {}),
+        ...enc,
         ...tx,
       }
+    }
     case 'trim':
       return {
         ...base,
@@ -200,9 +279,8 @@ export function buildVideoProcessPayload(
     case 'speed':
       return {
         ...base,
-        transcodePreset: state.transcodePreset,
+        transcodePreset: 'web_mp4',
         playbackSpeed,
-        ...(maxWidth > 0 ? { maxWidth } : {}),
         ...tx,
       }
     default:

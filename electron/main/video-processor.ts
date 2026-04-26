@@ -412,18 +412,20 @@ function buildTranscode(
 
   if (o.transcodePreset === 'copy_streams') {
     cmd.outputOptions(['-c', 'copy'])
-  } else if (o.transcodePreset === 'high_quality_mp4') {
-    cmd
-      .videoCodec('libx264')
-      .audioCodec('aac')
-      .addOptions(['-crf', '18', '-preset', 'slow', '-movflags', '+faststart', '-b:a', '192k'])
-    const vf = joinTransformAndMaxWidthVF(o)
-    if (vf) cmd.videoFilters(vf)
   } else {
     cmd
       .videoCodec('libx264')
       .audioCodec('aac')
-      .addOptions(['-crf', '23', '-preset', 'fast', '-movflags', '+faststart', '-b:a', '128k'])
+      .addOptions([
+        '-crf',
+        String(o.videoCrf),
+        '-preset',
+        o.x264Preset,
+        '-movflags',
+        '+faststart',
+        '-b:a',
+        o.audioBitrateAac,
+      ])
     const vf = joinTransformAndMaxWidthVF(o)
     if (vf) cmd.videoFilters(vf)
   }
@@ -435,7 +437,7 @@ function buildTranscode(
   return cmd
 }
 
-/** `atempo` 单次仅支持 0.5–2，串联实现 0.25–4 倍速 */
+/** `atempo` 单次仅支持 0.5–2，串联实现约 0.1–8 倍速 */
 function buildAtempoChain(speed: number): string {
   const parts: string[] = []
   let remaining = speed
@@ -467,11 +469,15 @@ function buildSpeedChange(
   const beforePts = joinTransformAndMaxWidthVF(o)
   const vChain = beforePts ? `${beforePts},setpts=PTS/${speedExpr}` : `setpts=PTS/${speedExpr}`
 
-  const hq = o.transcodePreset === 'high_quality_mp4'
-  const vEnc = hq
-    ? (['-crf', '18', '-preset', 'slow', '-movflags', '+faststart'] as const)
-    : (['-crf', '23', '-preset', 'fast', '-movflags', '+faststart'] as const)
-  const ba = hq ? '192k' : '128k'
+  const vEnc = [
+    '-crf',
+    String(o.videoCrf),
+    '-preset',
+    o.x264Preset,
+    '-movflags',
+    '+faststart',
+  ] as const
+  const ba = o.audioBitrateAac
 
   if (!hasAudio) {
     const cmd = ffmpeg(inputPath)
@@ -612,7 +618,8 @@ function createGifEncodeCommand(
   const fps = o.gifFps
   const w = o.gifMaxWidth
   const tp = videoTransformFilterParts(o).join(',')
-  const graph = `fps=${fps},scale=${w}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=single[p];[s1][p]paletteuse=dither=bayer`
+  /** 勿用 stats_mode=single：片头黑场/淡入时调色板会塌成单色，导出全黑 GIF */
+  const graph = `fps=${fps},scale=${w}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=full[p];[s1][p]paletteuse=dither=bayer`
   const vf = tp ? `${tp},${graph}` : graph
   return ffmpeg(inputPath)
     .setStartTime(o.startSec)
@@ -788,10 +795,7 @@ async function buildConcatCommand(
   filterLines.push(`${concatIn}concat=n=${inputPaths.length}:v=1:a=1[outv][outa]`)
   const fc = filterLines.join(';')
 
-  const encOpts =
-    o.transcodePreset === 'high_quality_mp4'
-      ? ['-crf', '18', '-preset', 'slow', '-b:a', '192k']
-      : ['-crf', '23', '-preset', 'fast', '-b:a', '128k']
+  const encOpts = ['-crf', String(o.videoCrf), '-preset', o.x264Preset, '-b:a', o.audioBitrateAac]
 
   const cmd = ffmpeg()
   for (const p of inputPaths) {
@@ -1016,6 +1020,53 @@ export async function processVideo(
     return { success: true, outputPath }
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Video processing failed'
+    return { success: false, error: message }
+  }
+}
+
+/** 单次 ffmpeg，不通过 WebContents 上报进度（用于预览区「截帧」） */
+function runFfmpegOnce(cmd: FfmpegCommand): Promise<void> {
+  const id = `frame-once-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  activeCommands.set(id, cmd)
+  return new Promise((resolve, reject) => {
+    cmd
+      .on('end', () => {
+        activeCommands.delete(id)
+        resolve()
+      })
+      .on('error', (err: Error, _stdout, stderr) => {
+        activeCommands.delete(id)
+        const msg = err?.message || stderr || 'ffmpeg error'
+        reject(new Error(msg))
+      })
+      .run()
+  })
+}
+
+/**
+ * 将视频中某一时刻导出为单张图片（与队列中的 extract_frame 单帧逻辑一致，无旋转滤镜）。
+ */
+export async function exportVideoPreviewFrameToPath(
+  inputPath: string,
+  timeSec: number,
+  outputPath: string,
+  format: 'png' | 'jpeg',
+): Promise<ProcessVideoResult> {
+  try {
+    configureFfmpegStatic(ffmpeg)
+    const st = await fs.stat(inputPath).catch(() => null)
+    if (!st?.isFile()) {
+      return { success: false, error: '输入文件不存在' }
+    }
+    const t = Number.isFinite(timeSec) && timeSec >= 0 ? timeSec : 0
+    const cmd = ffmpeg(inputPath).seekInput(t).outputOptions(['-frames:v', '1']).output(outputPath)
+    if (format === 'jpeg') {
+      cmd.outputOptions(['-q:v', '2'])
+    }
+    await runFfmpegOnce(cmd)
+    return { success: true, outputPath }
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : '截帧失败'
     return { success: false, error: message }
   }
 }

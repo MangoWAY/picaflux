@@ -684,7 +684,7 @@ export async function processImage(
     }
 
     // Format & Quality
-    const quality = options.quality || 80
+    const quality = options.quality ?? 100
     pipeline = applyFormatAndQuality(pipeline, format, quality)
 
     await pipeline.toFile(writePath)
@@ -722,7 +722,7 @@ export async function sliceImageGrid(
     const parsedPath = path.parse(inputPath)
     const requested = options.format || 'original'
     const { format, outputExt } = resolveOutputFormatAndExt(inputPath, requested)
-    const quality = options.quality || 80
+    const quality = options.quality ?? 100
 
     let pipelineInput: string | Buffer = inputPath
     if (options.removeBackground) {

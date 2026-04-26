@@ -2,19 +2,17 @@ import React, { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { LucideIcon } from 'lucide-react'
 import {
-  Aperture,
   BookmarkPlus,
   Clapperboard,
   Film,
   FolderOpen,
+  Image,
   Gauge,
   Layers2,
   ListVideo,
   Music,
   Play,
-  Rotate3d,
   Scissors,
-  SlidersHorizontal,
   Sparkles,
   Square,
   Trash2,
@@ -22,6 +20,7 @@ import {
 } from 'lucide-react'
 import {
   hasAnyModeEnabled,
+  TRANSCODE_TIER_CRF,
   VIDEO_PROCESSING_ORDER,
   type VideoModeEnabledMap,
   type VideoProcessFormState,
@@ -30,65 +29,14 @@ import {
 import type { VideoProcessPresetRecord } from '@/lib/videoPreset'
 import { PanelToggle } from './PanelToggle'
 
-const MODE_GROUPS: {
-  id: 'encode' | 'time' | 'audio' | 'merge'
-  label: string
-  modes: { id: VideoWorkbenchMode; label: string }[]
-}[] = [
-  {
-    id: 'encode',
-    label: '编码与封装',
-    modes: [
-      { id: 'transcode', label: '转码 / 压缩' },
-      { id: 'speed', label: '变速' },
-    ],
-  },
-  {
-    id: 'time',
-    label: '时间与导出',
-    modes: [
-      { id: 'trim', label: '裁剪片段' },
-      { id: 'extract_frame', label: '截帧' },
-      { id: 'gif', label: '导出 GIF' },
-      { id: 'webp_anim', label: '导出 WebP（动图）' },
-    ],
-  },
-  {
-    id: 'audio',
-    label: '音轨',
-    modes: [
-      { id: 'audio_extract', label: '抽取音频' },
-      { id: 'strip_audio', label: '去除音轨' },
-    ],
-  },
-  {
-    id: 'merge',
-    label: '合并',
-    modes: [{ id: 'concat', label: '合并片段' }],
-  },
-]
-
-const MODE_HINT: Partial<Record<VideoWorkbenchMode, string>> = {
-  transcode: 'H.264 / AAC 等封装',
-  speed: '整段变速，约 0.25–4 倍',
-  trim: '按时间线裁剪后导出',
-  extract_frame: '单帧或间隔序列',
-  gif: '片段转 GIF',
-  webp_anim: '片段转动图 WebP',
-  audio_extract: '导出 M4A / MP3 / WAV',
-  strip_audio: '去掉音轨重封装',
-  concat: '多段按列表顺序合并',
-}
-
-const TRANSFORM_MODES: VideoWorkbenchMode[] = [
-  'transcode',
-  'trim',
-  'speed',
-  'strip_audio',
-  'gif',
-  'webp_anim',
-  'extract_frame',
-  'concat',
+/** 侧栏处理项（无分组标题）；执行顺序见 `VIDEO_PROCESSING_ORDER` */
+const VIDEO_MODE_ROWS: { id: VideoWorkbenchMode; label: string }[] = [
+  { id: 'transcode', label: '压缩' },
+  { id: 'speed', label: '变速' },
+  { id: 'audio_extract', label: '抽取音频' },
+  { id: 'strip_audio', label: '去除音轨' },
+  { id: 'concat', label: '合并片段' },
+  { id: 'gif', label: '导出 GIF' },
 ]
 
 /** 与图片侧栏一致：功能标题前小图标 */
@@ -96,7 +44,7 @@ const MODE_ROW_ICONS: Record<VideoWorkbenchMode, LucideIcon> = {
   transcode: Film,
   speed: Gauge,
   trim: Scissors,
-  extract_frame: Aperture,
+  extract_frame: Image,
   gif: Sparkles,
   webp_anim: Layers2,
   audio_extract: Music,
@@ -108,12 +56,6 @@ const FIELD =
   'w-full rounded-md border border-[#3d3d3d] bg-[#121212] px-2 py-1.5 text-xs text-white focus:border-blue-500 focus:outline-none disabled:opacity-50'
 const LABEL = 'mb-1 block text-[11px] font-medium text-gray-400'
 
-function parseSecForDisplay(s: string): number {
-  const n = parseFloat(String(s).trim().replace(',', '.'))
-  if (!Number.isFinite(n) || n < 0) return NaN
-  return n
-}
-
 function pickPrimaryModeField(
   modeEnabled: VideoModeEnabledMap,
   previous: VideoWorkbenchMode,
@@ -121,15 +63,6 @@ function pickPrimaryModeField(
   if (modeEnabled[previous]) return previous
   const next = VIDEO_PROCESSING_ORDER.find((m) => modeEnabled[m])
   return next ?? 'transcode'
-}
-
-function formatDisplayClock(sec: number): string {
-  if (!Number.isFinite(sec) || sec < 0) return '—'
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60)
-  const ms = Math.floor((sec % 1) * 1000)
-  if (ms > 0) return `${m}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`
-  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 interface VideoSettingsPanelProps {
@@ -196,19 +129,6 @@ export function VideoSettingsPanel({
     selectedForProcessCount > 0 &&
     Boolean(state.outputDir.trim()) &&
     (!state.modeEnabled.concat || selectedForProcessCount >= 2)
-
-  const startSec = parseSecForDisplay(state.startSecStr)
-  const clipDurSec = parseSecForDisplay(state.durationSecStr)
-  const endSec =
-    Number.isFinite(startSec) && Number.isFinite(clipDurSec) ? startSec + clipDurSec : NaN
-  const extractTimeSec = parseSecForDisplay(state.timeSecStr)
-
-  const showTransformCard = TRANSFORM_MODES.some((id) => state.modeEnabled[id])
-  const copyStreamTransformConflict =
-    state.videoTransformEnabled &&
-    state.modeEnabled.transcode &&
-    state.transcodePreset === 'copy_streams' &&
-    (state.videoRotation !== '0' || state.videoFlip !== 'none')
 
   return (
     <div
@@ -335,385 +255,177 @@ export function VideoSettingsPanel({
             ) : null}
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
-            <div className="flex items-center gap-2 border-b border-[#2d2d2d] px-3 py-2">
-              <SlidersHorizontal className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
-              <span className="text-sm font-medium text-gray-200">处理模式</span>
-            </div>
-            <div className="px-2 py-2 space-y-1.5" aria-label="处理模式">
-              {MODE_GROUPS.map((g, gi) => (
-                <div key={g.id} className={clsx(gi > 0 && 'mt-2 border-t border-[#2d2d2d] pt-2')}>
-                  <p className="mb-1 px-1 text-[10px] font-medium uppercase tracking-wide text-gray-500">
-                    {g.label}
-                  </p>
-                  <div className="flex flex-col gap-1.5">
-                    {g.modes.map((m) => {
-                      const enabled = state.modeEnabled[m.id]
-                      const ModeIcon = MODE_ROW_ICONS[m.id]
-                      return (
-                        <div
-                          key={m.id}
-                          className={clsx(
-                            'overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#141414]',
-                            enabled && 'border-blue-500/35 ring-1 ring-blue-500/20',
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-2 px-2.5 py-2">
-                            <div className="flex min-w-0 flex-1 items-start gap-2">
-                              <ModeIcon
-                                className="mt-0.5 h-4 w-4 shrink-0 text-gray-400"
-                                aria-hidden
-                              />
-                              <div className="min-w-0 flex-1">
-                                <span className="block text-sm font-medium text-gray-200">
-                                  {m.label}
-                                </span>
-                                {MODE_HINT[m.id] ? (
-                                  <span className="mt-0.5 block text-[10px] leading-snug text-gray-500">
-                                    {MODE_HINT[m.id]}
-                                  </span>
-                                ) : null}
-                              </div>
+          <div
+            className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]"
+            aria-label="处理选项"
+          >
+            <div className="flex flex-col gap-1.5 px-2 py-2">
+              {VIDEO_MODE_ROWS.map((m) => {
+                const enabled = state.modeEnabled[m.id]
+                const ModeIcon = MODE_ROW_ICONS[m.id]
+                return (
+                  <div
+                    key={m.id}
+                    className={clsx(
+                      'overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#141414]',
+                      enabled && 'border-blue-500/35 ring-1 ring-blue-500/20',
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2 px-2.5 py-2">
+                      <div className="flex min-w-0 flex-1 items-start gap-2">
+                        <ModeIcon className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                        <div className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium text-gray-200">{m.label}</span>
+                        </div>
+                      </div>
+                      <PanelToggle
+                        checked={enabled}
+                        onChange={(v) => setModeToggle(m.id, v)}
+                        ariaLabel={`${enabled ? '关闭' : '启用'}：${m.label}`}
+                      />
+                    </div>
+                    {enabled ? (
+                      <div className="space-y-2 border-t border-[#2d2d2d] bg-[#121212]/80 px-2.5 pb-2.5 pt-2">
+                        {m.id === 'transcode' ? (
+                          <div className="space-y-2">
+                            <div>
+                              <label className={LABEL}>压缩质量</label>
+                              <select
+                                value={state.transcodeQualityTier}
+                                onChange={(e) =>
+                                  update(
+                                    'transcodeQualityTier',
+                                    e.target.value as VideoProcessFormState['transcodeQualityTier'],
+                                  )
+                                }
+                                disabled={isProcessing}
+                                className={FIELD}
+                              >
+                                <option value="low">低（CRF {TRANSCODE_TIER_CRF.low}）</option>
+                                <option value="medium">
+                                  中（CRF {TRANSCODE_TIER_CRF.medium}）
+                                </option>
+                                <option value="high">高（CRF {TRANSCODE_TIER_CRF.high}）</option>
+                                <option value="custom">自定义</option>
+                              </select>
                             </div>
-                            <PanelToggle
-                              checked={enabled}
-                              onChange={(v) => setModeToggle(m.id, v)}
-                              ariaLabel={`${enabled ? '关闭' : '启用'}：${m.label}`}
+                            {state.transcodeQualityTier === 'custom' ? (
+                              <div>
+                                <label className={LABEL}>CRF</label>
+                                <p className="mb-1.5 text-[10px] leading-relaxed text-gray-500">
+                                  数值越小画质越好、文件越大；越大则更易压缩体积、画质略降。网页常用约
+                                  18–28。
+                                </p>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={state.transcodeCrfStr}
+                                  onChange={(e) => update('transcodeCrfStr', e.target.value)}
+                                  disabled={isProcessing}
+                                  className={FIELD}
+                                  placeholder="23"
+                                />
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {m.id === 'speed' ? (
+                          <div>
+                            <label className={LABEL}>倍速</label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={state.playbackSpeedStr}
+                              onChange={(e) => update('playbackSpeedStr', e.target.value)}
+                              disabled={isProcessing}
+                              className={FIELD}
+                              placeholder="1"
                             />
                           </div>
-                          {enabled ? (
-                            <div className="space-y-2 border-t border-[#2d2d2d] bg-[#121212]/80 px-2.5 pb-2.5 pt-2">
-                              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
-                                高级参数
-                              </p>
-                              {(m.id === 'trim' || m.id === 'gif' || m.id === 'webp_anim') && (
-                                <p className="text-[11px] leading-relaxed text-gray-500">
-                                  片段：起点 {formatDisplayClock(startSec)} · 终点{' '}
-                                  {formatDisplayClock(endSec)}
-                                  {Number.isFinite(clipDurSec)
-                                    ? ` · 时长 ${clipDurSec.toFixed(3).replace(/\.?0+$/, '')} s`
-                                    : ''}
-                                  <span className="text-gray-600">（在中间预览区时间线调整）</span>
-                                </p>
-                              )}
-                              {m.id === 'extract_frame' ? (
-                                <p className="text-[11px] leading-relaxed text-gray-500">
-                                  截取时刻 {formatDisplayClock(extractTimeSec)}
-                                  <span className="text-gray-600">（在时间线调整）</span>
-                                </p>
-                              ) : null}
-                              {m.id === 'transcode' ? (
-                                <div className="space-y-2">
-                                  <div>
-                                    <label className={LABEL}>编码预设</label>
-                                    <select
-                                      value={state.transcodePreset}
-                                      onChange={(e) =>
-                                        update(
-                                          'transcodePreset',
-                                          e.target
-                                            .value as VideoProcessFormState['transcodePreset'],
-                                        )
-                                      }
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    >
-                                      <option value="web_mp4">Web MP4（H.264 + AAC）</option>
-                                      <option value="high_quality_mp4">高质量 MP4</option>
-                                      <option value="copy_streams">流拷贝（重封装）</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className={LABEL}>最长边上限（像素，0=不缩放）</label>
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      value={state.maxWidthStr}
-                                      onChange={(e) => update('maxWidthStr', e.target.value)}
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    />
-                                  </div>
-                                </div>
-                              ) : null}
-                              {m.id === 'speed' ? (
-                                <div className="space-y-2">
-                                  <p className="text-[10px] leading-snug text-gray-500">
-                                    整段变速（重编码）；无声素材仅变速画面。
-                                  </p>
-                                  <div>
-                                    <label className={LABEL}>编码预设</label>
-                                    <select
-                                      value={state.transcodePreset}
-                                      onChange={(e) =>
-                                        update(
-                                          'transcodePreset',
-                                          e.target
-                                            .value as VideoProcessFormState['transcodePreset'],
-                                        )
-                                      }
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    >
-                                      <option value="web_mp4">Web MP4（H.264 + AAC）</option>
-                                      <option value="high_quality_mp4">高质量 MP4</option>
-                                      <option value="copy_streams">
-                                        流拷贝（变速时会改为 Web MP4）
-                                      </option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className={LABEL}>播放倍速（如 2、0.5）</label>
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={state.playbackSpeedStr}
-                                      onChange={(e) => update('playbackSpeedStr', e.target.value)}
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className={LABEL}>最长边上限（像素，0=不缩放）</label>
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      value={state.maxWidthStr}
-                                      onChange={(e) => update('maxWidthStr', e.target.value)}
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    />
-                                  </div>
-                                </div>
-                              ) : null}
-                              {m.id === 'concat' ? (
-                                <div className="space-y-2">
-                                  <p className="text-[10px] leading-snug text-gray-500">
-                                    按左侧列表从上到下拼接已勾选片段（≥2）；可拖拽排序；各段需含音轨。
-                                  </p>
-                                  <div>
-                                    <label className={LABEL}>编码预设</label>
-                                    <select
-                                      value={state.transcodePreset}
-                                      onChange={(e) =>
-                                        update(
-                                          'transcodePreset',
-                                          e.target
-                                            .value as VideoProcessFormState['transcodePreset'],
-                                        )
-                                      }
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    >
-                                      <option value="web_mp4">Web MP4（H.264 + AAC）</option>
-                                      <option value="high_quality_mp4">高质量 MP4</option>
-                                      <option value="copy_streams">
-                                        流拷贝（合并时可能改为重编码）
-                                      </option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className={LABEL}>
-                                      最长边上限（像素，0=按素材最大宽度）
-                                    </label>
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      value={state.maxWidthStr}
-                                      onChange={(e) => update('maxWidthStr', e.target.value)}
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    />
-                                  </div>
-                                </div>
-                              ) : null}
-                              {m.id === 'gif' || m.id === 'webp_anim' ? (
-                                <div className="space-y-2">
-                                  <div>
-                                    <label className={LABEL}>帧率（1–15）</label>
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={state.gifFpsStr}
-                                      onChange={(e) => update('gifFpsStr', e.target.value)}
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className={LABEL}>
-                                      {m.id === 'webp_anim' ? 'WebP 最大宽度' : 'GIF 最大宽度'}
-                                    </label>
-                                    <input
-                                      type="number"
-                                      min={160}
-                                      value={state.gifMaxWidthStr}
-                                      onChange={(e) => update('gifMaxWidthStr', e.target.value)}
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    />
-                                  </div>
-                                  {m.id === 'webp_anim' ? (
-                                    <div>
-                                      <label className={LABEL}>WebP 质量（1–100）</label>
-                                      <input
-                                        type="number"
-                                        min={1}
-                                        max={100}
-                                        value={state.webpQualityStr}
-                                        onChange={(e) => update('webpQualityStr', e.target.value)}
-                                        disabled={isProcessing}
-                                        className={FIELD}
-                                      />
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                              {m.id === 'extract_frame' ? (
-                                <div className="space-y-2">
-                                  <div>
-                                    <label className={LABEL}>间隔序列（秒，0=仅单帧）</label>
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={state.frameIntervalStr}
-                                      onChange={(e) => update('frameIntervalStr', e.target.value)}
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className={LABEL}>序列最多帧数</label>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      value={state.maxFrameCountStr}
-                                      onChange={(e) => update('maxFrameCountStr', e.target.value)}
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className={LABEL}>图片格式</label>
-                                    <select
-                                      value={state.frameFormat}
-                                      onChange={(e) =>
-                                        update('frameFormat', e.target.value as 'png' | 'jpeg')
-                                      }
-                                      disabled={isProcessing}
-                                      className={FIELD}
-                                    >
-                                      <option value="png">PNG</option>
-                                      <option value="jpeg">JPEG</option>
-                                    </select>
-                                  </div>
-                                </div>
-                              ) : null}
-                              {m.id === 'trim' ? (
-                                <div>
-                                  <label className={LABEL}>可选：最长边上限（0=不缩放）</label>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={state.maxWidthStr}
-                                    onChange={(e) => update('maxWidthStr', e.target.value)}
-                                    disabled={isProcessing}
-                                    className={FIELD}
-                                  />
-                                </div>
-                              ) : null}
-                              {m.id === 'audio_extract' ? (
-                                <div>
-                                  <label className={LABEL}>音频格式</label>
-                                  <select
-                                    value={state.audioFormat}
-                                    onChange={(e) =>
-                                      update('audioFormat', e.target.value as 'aac' | 'mp3' | 'wav')
-                                    }
-                                    disabled={isProcessing}
-                                    className={FIELD}
-                                  >
-                                    <option value="aac">M4A (AAC)</option>
-                                    <option value="mp3">MP3</option>
-                                    <option value="wav">WAV</option>
-                                  </select>
-                                </div>
-                              ) : null}
-                              {m.id === 'strip_audio' ? (
-                                <p className="text-[11px] text-gray-500">
-                                  去除音轨并重封装；无额外参数。
-                                </p>
-                              ) : null}
+                        ) : null}
+                        {m.id === 'concat' ? (
+                          <div className="space-y-2">
+                            <div>
+                              <label className={LABEL}>编码预设</label>
+                              <select
+                                value={state.transcodePreset}
+                                onChange={(e) =>
+                                  update(
+                                    'transcodePreset',
+                                    e.target.value as VideoProcessFormState['transcodePreset'],
+                                  )
+                                }
+                                disabled={isProcessing}
+                                className={FIELD}
+                              >
+                                <option value="web_mp4">Web MP4（H.264 + AAC）</option>
+                                <option value="high_quality_mp4">高质量 MP4</option>
+                                <option value="copy_streams">流拷贝（合并时可能改为重编码）</option>
+                              </select>
                             </div>
-                          ) : null}
-                        </div>
-                      )
-                    })}
+                            <div>
+                              <label className={LABEL}>最长边</label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={state.maxWidthStr}
+                                onChange={(e) => update('maxWidthStr', e.target.value)}
+                                disabled={isProcessing}
+                                className={FIELD}
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+                        {m.id === 'gif' ? (
+                          <div className="space-y-2">
+                            <div>
+                              <label className={LABEL}>帧率</label>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={state.gifFpsStr}
+                                onChange={(e) => update('gifFpsStr', e.target.value)}
+                                disabled={isProcessing}
+                                className={FIELD}
+                              />
+                            </div>
+                            <div>
+                              <label className={LABEL}>GIF 最大宽度</label>
+                              <input
+                                type="number"
+                                min={160}
+                                value={state.gifMaxWidthStr}
+                                onChange={(e) => update('gifMaxWidthStr', e.target.value)}
+                                disabled={isProcessing}
+                                className={FIELD}
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+                        {m.id === 'audio_extract' ? (
+                          <div>
+                            <label className={LABEL}>音频格式</label>
+                            <select
+                              value={state.audioFormat}
+                              onChange={(e) =>
+                                update('audioFormat', e.target.value as 'aac' | 'mp3' | 'wav')
+                              }
+                              disabled={isProcessing}
+                              className={FIELD}
+                            >
+                              <option value="aac">M4A (AAC)</option>
+                              <option value="mp3">MP3</option>
+                              <option value="wav">WAV</option>
+                            </select>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
-
-          {showTransformCard ? (
-            <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
-              <div className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <Rotate3d className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
-                  <span className="shrink-0 text-sm font-medium text-gray-200">旋转与翻转</span>
-                </div>
-                <PanelToggle
-                  checked={state.videoTransformEnabled}
-                  onChange={(v) => update('videoTransformEnabled', v)}
-                  ariaLabel="启用视频旋转与翻转"
-                />
-              </div>
-              {state.videoTransformEnabled ? (
-                <div className="space-y-2 border-t border-[#2d2d2d] px-3 pb-3 pt-2">
-                  <div>
-                    <label className={LABEL}>旋转（顺时针）</label>
-                    <select
-                      value={state.videoRotation}
-                      onChange={(e) =>
-                        update(
-                          'videoRotation',
-                          e.target.value as VideoProcessFormState['videoRotation'],
-                        )
-                      }
-                      disabled={isProcessing}
-                      className={FIELD}
-                    >
-                      <option value="0">不旋转</option>
-                      <option value="90">90°</option>
-                      <option value="180">180°</option>
-                      <option value="270">270°</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={LABEL}>翻转</label>
-                    <select
-                      value={state.videoFlip}
-                      onChange={(e) =>
-                        update('videoFlip', e.target.value as VideoProcessFormState['videoFlip'])
-                      }
-                      disabled={isProcessing}
-                      className={FIELD}
-                    >
-                      <option value="none">无</option>
-                      <option value="horizontal">水平</option>
-                      <option value="vertical">垂直</option>
-                      <option value="both">水平 + 垂直</option>
-                    </select>
-                  </div>
-                  {copyStreamTransformConflict ? (
-                    <p className="text-[11px] leading-snug text-amber-500/90">
-                      流拷贝不能与旋转/翻转同时进行，请改用转码预设或关闭本项。
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </div>
 
         <div className="shrink-0 space-y-2 border-t border-[#2d2d2d] bg-[#1e1e1e] px-4 py-2.5">

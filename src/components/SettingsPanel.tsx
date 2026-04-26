@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import clsx from 'clsx'
 import {
   FolderOpen,
-  SlidersHorizontal,
+  Image as ImageIcon,
   Play,
   RotateCcw,
   RotateCw,
@@ -171,7 +171,7 @@ export function SettingsPanel({
     >
       <div className="h-14 shrink-0 flex flex-col justify-center border-b border-[#2d2d2d] px-4">
         <div className="flex items-center">
-          <SlidersHorizontal className="mr-2 h-5 w-5 text-gray-400" />
+          <ImageIcon className="mr-2 h-5 w-5 text-gray-400" aria-hidden />
           <h2 className="font-semibold text-white">图片处理</h2>
         </div>
         {totalImageCount > 0 && (
@@ -186,7 +186,7 @@ export function SettingsPanel({
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#1e1e1e]">
         <div
-          className="min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto px-4 py-3"
+          className="min-h-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto px-4 py-2"
           style={{ overscrollBehavior: 'none' }}
         >
           <>
@@ -194,7 +194,7 @@ export function SettingsPanel({
               className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]"
               title="保存当前全部处理参数（不含输出目录与预览裁剪框）。最多 40 条，超出时删除最旧一条。"
             >
-              <div className="flex items-center justify-between gap-3 px-3 py-2">
+              <div className="flex items-center justify-between gap-3 px-2.5 py-1.5">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <BookmarkPlus className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
                   <span className="shrink-0 text-sm font-medium text-gray-200">预设</span>
@@ -209,7 +209,7 @@ export function SettingsPanel({
                 />
               </div>
               {presetSectionEnabled ? (
-                <div className="space-y-1.5 border-t border-[#2d2d2d] px-3 pb-3 pt-2">
+                <div className="space-y-1.5 border-t border-[#2d2d2d] px-2.5 pb-2.5 pt-2">
                   <div className="flex min-w-0 gap-1">
                     <select
                       value={selectedPresetId}
@@ -287,633 +287,656 @@ export function SettingsPanel({
               ) : null}
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
-              <div className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <Rotate3d className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
-                  <span className="shrink-0 text-sm font-medium text-gray-200">旋转与镜像</span>
-                  {options.rotateMirrorEnabled && rotateStatusHint ? (
-                    <span
-                      className="min-w-0 truncate text-xs text-gray-500"
-                      title={rotateStatusHint}
-                    >
-                      {rotateStatusHint}
-                    </span>
+            <div
+              className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]"
+              aria-label="处理选项"
+            >
+              <div className="flex flex-col gap-1.5 px-2 py-2">
+                <div className="overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#141414]">
+                  <div className="flex items-center justify-between gap-3 px-2.5 py-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <Rotate3d className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                      <span className="shrink-0 text-sm font-medium text-gray-200">旋转与镜像</span>
+                      {options.rotateMirrorEnabled && rotateStatusHint ? (
+                        <span
+                          className="min-w-0 truncate text-xs text-gray-500"
+                          title={rotateStatusHint}
+                        >
+                          {rotateStatusHint}
+                        </span>
+                      ) : null}
+                    </div>
+                    <PanelToggle
+                      checked={options.rotateMirrorEnabled}
+                      onChange={(v) => updateOption('rotateMirrorEnabled', v)}
+                      ariaLabel="启用旋转与镜像"
+                    />
+                  </div>
+                  {options.rotateMirrorEnabled ? (
+                    <div className="space-y-2 border-t border-[#2d2d2d] px-2.5 pb-2.5 pt-2">
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onChange({
+                              ...options,
+                              rotateQuarterTurns: 0,
+                              flipHorizontal: false,
+                              flipVertical: false,
+                            })
+                          }
+                          className="text-xs font-medium text-blue-400/95 transition hover:text-blue-300"
+                        >
+                          重置
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        <button
+                          type="button"
+                          aria-label="逆时针旋转 90°"
+                          title="逆时针 90°"
+                          onClick={() =>
+                            updateOption('rotateQuarterTurns', options.rotateQuarterTurns - 1)
+                          }
+                          className="flex items-center justify-center rounded-md border border-[#3d3d3d] bg-[#121212] py-2.5 text-gray-200 transition-colors hover:border-blue-500/50 hover:bg-[#1e1e1e]"
+                        >
+                          <RotateCcw className="h-5 w-5 shrink-0" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="顺时针旋转 90°"
+                          title="顺时针 90°"
+                          onClick={() =>
+                            updateOption('rotateQuarterTurns', options.rotateQuarterTurns + 1)
+                          }
+                          className="flex items-center justify-center rounded-md border border-[#3d3d3d] bg-[#121212] py-2.5 text-gray-200 transition-colors hover:border-blue-500/50 hover:bg-[#1e1e1e]"
+                        >
+                          <RotateCw className="h-5 w-5 shrink-0" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="水平镜像"
+                          title="水平镜像"
+                          onClick={() => updateOption('flipHorizontal', !options.flipHorizontal)}
+                          className={`flex items-center justify-center rounded-md border py-2.5 transition-colors ${
+                            options.flipHorizontal
+                              ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
+                              : 'border-[#3d3d3d] bg-[#121212] text-gray-200 hover:border-blue-500/50 hover:bg-[#1e1e1e]'
+                          }`}
+                        >
+                          <FlipHorizontal className="h-5 w-5 shrink-0" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="垂直镜像"
+                          title="垂直镜像"
+                          onClick={() => updateOption('flipVertical', !options.flipVertical)}
+                          className={`flex items-center justify-center rounded-md border py-2.5 transition-colors ${
+                            options.flipVertical
+                              ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
+                              : 'border-[#3d3d3d] bg-[#121212] text-gray-200 hover:border-blue-500/50 hover:bg-[#1e1e1e]'
+                          }`}
+                        >
+                          <FlipVertical className="h-5 w-5 shrink-0" />
+                        </button>
+                      </div>
+                    </div>
                   ) : null}
                 </div>
-                <PanelToggle
-                  checked={options.rotateMirrorEnabled}
-                  onChange={(v) => updateOption('rotateMirrorEnabled', v)}
-                  ariaLabel="启用旋转与镜像"
-                />
-              </div>
-              {options.rotateMirrorEnabled ? (
-                <div className="space-y-2 border-t border-[#2d2d2d] px-3 pb-3 pt-2">
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() =>
+
+                <div className="overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#141414]">
+                  <div className="flex items-center justify-between gap-3 px-2.5 py-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <Crop className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                      <span
+                        className="min-w-0 text-sm font-medium text-gray-200"
+                        title="开启后在预览中拖动画框；导出与切图会在旋转/镜像之后先裁剪"
+                      >
+                        裁剪
+                      </span>
+                    </div>
+                    <PanelToggle
+                      checked={options.cropEnabled}
+                      onChange={(v) =>
                         onChange({
                           ...options,
-                          rotateQuarterTurns: 0,
-                          flipHorizontal: false,
-                          flipVertical: false,
+                          cropEnabled: v,
+                          cropNorm: v
+                            ? options.cropNorm.w > 0 && options.cropNorm.h > 0
+                              ? options.cropNorm
+                              : { x: 0, y: 0, w: 1, h: 1 }
+                            : options.cropNorm,
                         })
                       }
-                      className="text-xs font-medium text-blue-400/95 transition hover:text-blue-300"
-                    >
-                      重置
-                    </button>
+                      ariaLabel="裁剪"
+                    />
                   </div>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    <button
-                      type="button"
-                      aria-label="逆时针旋转 90°"
-                      title="逆时针 90°"
-                      onClick={() =>
-                        updateOption('rotateQuarterTurns', options.rotateQuarterTurns - 1)
-                      }
-                      className="flex items-center justify-center rounded-md border border-[#3d3d3d] bg-[#121212] py-2.5 text-gray-200 transition-colors hover:border-blue-500/50 hover:bg-[#1e1e1e]"
-                    >
-                      <RotateCcw className="h-5 w-5 shrink-0" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="顺时针旋转 90°"
-                      title="顺时针 90°"
-                      onClick={() =>
-                        updateOption('rotateQuarterTurns', options.rotateQuarterTurns + 1)
-                      }
-                      className="flex items-center justify-center rounded-md border border-[#3d3d3d] bg-[#121212] py-2.5 text-gray-200 transition-colors hover:border-blue-500/50 hover:bg-[#1e1e1e]"
-                    >
-                      <RotateCw className="h-5 w-5 shrink-0" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="水平镜像"
-                      title="水平镜像"
-                      onClick={() => updateOption('flipHorizontal', !options.flipHorizontal)}
-                      className={`flex items-center justify-center rounded-md border py-2.5 transition-colors ${
-                        options.flipHorizontal
-                          ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
-                          : 'border-[#3d3d3d] bg-[#121212] text-gray-200 hover:border-blue-500/50 hover:bg-[#1e1e1e]'
-                      }`}
-                    >
-                      <FlipHorizontal className="h-5 w-5 shrink-0" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="垂直镜像"
-                      title="垂直镜像"
-                      onClick={() => updateOption('flipVertical', !options.flipVertical)}
-                      className={`flex items-center justify-center rounded-md border py-2.5 transition-colors ${
-                        options.flipVertical
-                          ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
-                          : 'border-[#3d3d3d] bg-[#121212] text-gray-200 hover:border-blue-500/50 hover:bg-[#1e1e1e]'
-                      }`}
-                    >
-                      <FlipVertical className="h-5 w-5 shrink-0" />
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
-              <div className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <Crop className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
-                  <span
-                    className="min-w-0 text-sm font-medium text-gray-200"
-                    title="开启后在预览中拖动画框；导出与切图会在旋转/镜像之后先裁剪"
-                  >
-                    裁剪
-                  </span>
-                </div>
-                <PanelToggle
-                  checked={options.cropEnabled}
-                  onChange={(v) =>
-                    onChange({
-                      ...options,
-                      cropEnabled: v,
-                      cropNorm: v
-                        ? options.cropNorm.w > 0 && options.cropNorm.h > 0
-                          ? options.cropNorm
-                          : { x: 0, y: 0, w: 1, h: 1 }
-                        : options.cropNorm,
-                    })
-                  }
-                  ariaLabel="裁剪"
-                />
-              </div>
-              {options.cropEnabled ? (
-                <div className="border-t border-[#2d2d2d] px-3 pb-3 pt-3">
-                  <div className="mb-3 flex items-center justify-between gap-2 border-b border-[#2a2a2a] pb-3">
-                    <span className="text-[11px] font-medium tracking-wide text-gray-500">
-                      四边距（px）
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onChange({ ...options, cropNorm: { x: 0, y: 0, w: 1, h: 1 } })}
-                      className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-blue-400/95 transition hover:bg-blue-500/10 hover:text-blue-300"
-                    >
-                      重置
-                    </button>
-                  </div>
-                  {cropVisualPx ? (
-                    <div className="flex min-w-0 gap-3">
-                      {(
-                        [
-                          { key: 'left' as const, label: '左', title: '距图像左侧' },
-                          { key: 'top' as const, label: '上', title: '距图像上侧' },
-                          { key: 'right' as const, label: '右', title: '距图像右侧' },
-                          { key: 'bottom' as const, label: '下', title: '距图像下侧' },
-                        ] as const
-                      ).map(({ key, label, title }) => (
-                        <div
-                          key={key}
-                          className="flex min-w-0 flex-1 basis-0 flex-col gap-2"
-                          title={title}
+                  {options.cropEnabled ? (
+                    <div className="border-t border-[#2d2d2d] px-2.5 pb-2.5 pt-2">
+                      <div className="mb-2 flex items-center justify-between gap-2 border-b border-[#2a2a2a] pb-2">
+                        <span className="text-[11px] font-medium tracking-wide text-gray-500">
+                          四边距（px）
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onChange({ ...options, cropNorm: { x: 0, y: 0, w: 1, h: 1 } })
+                          }
+                          className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-blue-400/95 transition hover:bg-blue-500/10 hover:text-blue-300"
                         >
-                          <span className="block text-center text-[11px] font-medium text-gray-500">
-                            {label}
-                          </span>
+                          重置
+                        </button>
+                      </div>
+                      {cropVisualPx ? (
+                        <div className="flex min-w-0 gap-3">
+                          {(
+                            [
+                              { key: 'left' as const, label: '左', title: '距图像左侧' },
+                              { key: 'top' as const, label: '上', title: '距图像上侧' },
+                              { key: 'right' as const, label: '右', title: '距图像右侧' },
+                              { key: 'bottom' as const, label: '下', title: '距图像下侧' },
+                            ] as const
+                          ).map(({ key, label, title }) => (
+                            <div
+                              key={key}
+                              className="flex min-w-0 flex-1 basis-0 flex-col gap-2"
+                              title={title}
+                            >
+                              <span className="block text-center text-[11px] font-medium text-gray-500">
+                                {label}
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                aria-label={`裁剪${label}边距像素`}
+                                value={cropInsetsPx[key]}
+                                onChange={(e) => {
+                                  const n = parseInt(e.target.value, 10)
+                                  const v = Number.isFinite(n) ? Math.max(0, n) : 0
+                                  if (!cropVisualPx) return
+                                  const W = cropVisualPx.w
+                                  const H = cropVisualPx.h
+                                  const next = { ...cropInsetsPx, [key]: v }
+                                  onChange({
+                                    ...options,
+                                    cropNorm: insetsPxToNorm(
+                                      next.left,
+                                      next.top,
+                                      next.right,
+                                      next.bottom,
+                                      W,
+                                      H,
+                                    ),
+                                  })
+                                }}
+                                className={GEOMETRY_NUM_FIELD}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="rounded-lg border border-dashed border-[#3a3a3a] bg-[#141414] px-3 py-2.5 text-center text-[11px] leading-relaxed text-gray-500">
+                          加载预览图后可输入像素，或与预览中拖拽同步
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#141414]">
+                  <div className="flex items-center justify-between gap-3 px-2.5 py-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <ScanLine className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                      <span
+                        className="min-w-0 text-sm font-medium text-gray-200"
+                        title="去除四周全透明像素；预览中绿色虚线框为保留区域；默认额外保留 2px（可调）"
+                      >
+                        裁切透明边
+                      </span>
+                    </div>
+                    <PanelToggle
+                      checked={options.trimTransparent}
+                      onChange={(v) => updateOption('trimTransparent', v)}
+                      ariaLabel="裁切透明边"
+                    />
+                  </div>
+                  {options.trimTransparent ? (
+                    <div className="border-t border-[#2d2d2d] px-2.5 pb-2 pt-2">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <span className="text-[11px] font-medium text-gray-500">额外保留</span>
+                        <div className="relative inline-flex shrink-0">
                           <input
                             type="number"
                             min={0}
-                            aria-label={`裁剪${label}边距像素`}
-                            value={cropInsetsPx[key]}
-                            onChange={(e) => {
-                              const n = parseInt(e.target.value, 10)
-                              const v = Number.isFinite(n) ? Math.max(0, n) : 0
-                              if (!cropVisualPx) return
-                              const W = cropVisualPx.w
-                              const H = cropVisualPx.h
-                              const next = { ...cropInsetsPx, [key]: v }
-                              onChange({
-                                ...options,
-                                cropNorm: insetsPxToNorm(
-                                  next.left,
-                                  next.top,
-                                  next.right,
-                                  next.bottom,
-                                  W,
-                                  H,
-                                ),
-                              })
-                            }}
-                            className={GEOMETRY_NUM_FIELD}
+                            max={512}
+                            step={1}
+                            aria-label="裁切透明边额外保留像素"
+                            value={options.trimPaddingPx}
+                            onChange={(e) => updateOption('trimPaddingPx', e.target.value)}
+                            className={clsx(GEOMETRY_NUM_FIELD_COMPACT, 'w-[4.25rem]')}
                           />
+                          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-medium text-gray-500">
+                            px
+                          </span>
                         </div>
-                      ))}
+                        <span className="text-[10px] text-gray-600">透明区域外扩</span>
+                      </div>
                     </div>
-                  ) : (
-                    <p className="rounded-lg border border-dashed border-[#3a3a3a] bg-[#141414] px-3 py-2.5 text-center text-[11px] leading-relaxed text-gray-500">
-                      加载预览图后可输入像素，或与预览中拖拽同步
-                    </p>
-                  )}
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
 
-            <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
-              <div className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <ScanLine className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
-                  <span
-                    className="min-w-0 text-sm font-medium text-gray-200"
-                    title="去除四周全透明像素；预览中绿色虚线框为保留区域；默认额外保留 2px（可调）"
+                <div className="min-w-0 overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#141414]">
+                  <button
+                    type="button"
+                    onClick={() => setGeometryResizeOpen((o) => !o)}
+                    className="flex w-full min-w-0 items-center justify-between gap-2 px-2.5 py-2 text-left transition-colors hover:bg-[#222]"
                   >
-                    裁切透明边
-                  </span>
-                </div>
-                <PanelToggle
-                  checked={options.trimTransparent}
-                  onChange={(v) => updateOption('trimTransparent', v)}
-                  ariaLabel="裁切透明边"
-                />
-              </div>
-              {options.trimTransparent ? (
-                <div className="border-t border-[#2d2d2d] px-3 pb-2.5 pt-2.5">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <span className="text-[11px] font-medium text-gray-500">额外保留</span>
-                    <div className="relative inline-flex shrink-0">
-                      <input
-                        type="number"
-                        min={0}
-                        max={512}
-                        step={1}
-                        aria-label="裁切透明边额外保留像素"
-                        value={options.trimPaddingPx}
-                        onChange={(e) => updateOption('trimPaddingPx', e.target.value)}
-                        className={clsx(GEOMETRY_NUM_FIELD_COMPACT, 'w-[4.25rem]')}
-                      />
-                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-medium text-gray-500">
-                        px
-                      </span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Maximize2 className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                      <span className="text-sm font-medium text-gray-200">缩放</span>
+                      {resizeSummary ? (
+                        <span className="truncate text-xs text-blue-300/90">{resizeSummary}</span>
+                      ) : (
+                        <span className="text-xs text-gray-500">未启用</span>
+                      )}
                     </div>
-                    <span className="text-[10px] text-gray-600">透明区域外扩</span>
-                  </div>
-                </div>
-              ) : null}
-            </div>
+                    {geometryResizeOpen ? (
+                      <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
+                    )}
+                  </button>
+                  {geometryResizeOpen ? (
+                    <div className="space-y-2 border-t border-[#2d2d2d] px-2.5 pb-2.5 pt-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onChange({
+                              ...options,
+                              resizeMode: 'percent',
+                              resizePixelsExpanded: false,
+                              width: '',
+                              height: '',
+                            })
+                          }
+                          className={clsx(
+                            'rounded-md border py-2 text-center text-xs font-medium transition-colors',
+                            options.resizeMode === 'percent'
+                              ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
+                              : 'border-[#3d3d3d] bg-[#121212] text-gray-400 hover:border-blue-500/40',
+                          )}
+                        >
+                          按比例
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onChange({
+                              ...options,
+                              resizeMode: 'pixels',
+                              resizePixelsExpanded: true,
+                              resizePercentPreset: 'none',
+                            })
+                          }
+                          className={clsx(
+                            'rounded-md border py-2 text-center text-xs font-medium transition-colors',
+                            options.resizeMode === 'pixels'
+                              ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
+                              : 'border-[#3d3d3d] bg-[#121212] text-gray-400 hover:border-blue-500/40',
+                          )}
+                        >
+                          指定宽高
+                        </button>
+                      </div>
 
-            <div className="min-w-0 overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
-              <button
-                type="button"
-                onClick={() => setGeometryResizeOpen((o) => !o)}
-                className="flex w-full min-w-0 items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-[#222]"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <Maximize2 className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
-                  <span className="text-sm font-medium text-gray-200">缩放</span>
-                  {resizeSummary ? (
-                    <span className="truncate text-xs text-blue-300/90">{resizeSummary}</span>
-                  ) : (
-                    <span className="text-xs text-gray-500">未启用</span>
-                  )}
-                </div>
-                {geometryResizeOpen ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
-                )}
-              </button>
-              {geometryResizeOpen ? (
-                <div className="space-y-3 border-t border-[#2d2d2d] px-3 pb-3 pt-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onChange({
-                          ...options,
-                          resizeMode: 'percent',
-                          resizePixelsExpanded: false,
-                          width: '',
-                          height: '',
-                        })
-                      }
-                      className={clsx(
-                        'rounded-md border py-2 text-center text-xs font-medium transition-colors',
-                        options.resizeMode === 'percent'
-                          ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
-                          : 'border-[#3d3d3d] bg-[#121212] text-gray-400 hover:border-blue-500/40',
-                      )}
-                    >
-                      按比例
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onChange({
-                          ...options,
-                          resizeMode: 'pixels',
-                          resizePixelsExpanded: true,
-                          resizePercentPreset: 'none',
-                        })
-                      }
-                      className={clsx(
-                        'rounded-md border py-2 text-center text-xs font-medium transition-colors',
-                        options.resizeMode === 'pixels'
-                          ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
-                          : 'border-[#3d3d3d] bg-[#121212] text-gray-400 hover:border-blue-500/40',
-                      )}
-                    >
-                      指定宽高
-                    </button>
-                  </div>
-
-                  {options.resizeMode === 'percent' ? (
-                    <>
-                      <div
-                        className="grid min-w-0 grid-cols-4 gap-1.5"
-                        title="与指定宽高二选一；再点同一比例可清除"
-                      >
-                        {(
-                          [
-                            { preset: 'p75' as const, label: '75%' },
-                            { preset: 'p50' as const, label: '50%' },
-                            { preset: 'p25' as const, label: '25%' },
-                          ] as const
-                        ).map(({ preset, label }) => {
-                          const active =
-                            options.resizeMode === 'percent' &&
-                            options.resizePercentPreset === preset
-                          return (
+                      {options.resizeMode === 'percent' ? (
+                        <>
+                          <div
+                            className="grid min-w-0 grid-cols-4 gap-1.5"
+                            title="与指定宽高二选一；再点同一比例可清除"
+                          >
+                            {(
+                              [
+                                { preset: 'p75' as const, label: '75%' },
+                                { preset: 'p50' as const, label: '50%' },
+                                { preset: 'p25' as const, label: '25%' },
+                              ] as const
+                            ).map(({ preset, label }) => {
+                              const active =
+                                options.resizeMode === 'percent' &&
+                                options.resizePercentPreset === preset
+                              return (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() => {
+                                    const turnOff = active
+                                    onChange({
+                                      ...options,
+                                      resizeMode: 'percent',
+                                      resizePercentPreset: turnOff ? 'none' : preset,
+                                      resizePixelsExpanded: false,
+                                    })
+                                  }}
+                                  className={clsx(
+                                    'min-w-0 rounded-md border py-2 text-center text-xs font-medium transition-colors',
+                                    active
+                                      ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
+                                      : 'border-[#3d3d3d] bg-[#121212] text-gray-300 hover:border-blue-500/40 hover:bg-[#1e1e1e]',
+                                  )}
+                                >
+                                  {label}
+                                </button>
+                              )
+                            })}
                             <button
-                              key={preset}
                               type="button"
                               onClick={() => {
-                                const turnOff = active
+                                const active =
+                                  options.resizeMode === 'percent' &&
+                                  options.resizePercentPreset === 'custom'
                                 onChange({
                                   ...options,
                                   resizeMode: 'percent',
-                                  resizePercentPreset: turnOff ? 'none' : preset,
+                                  resizePercentPreset: active ? 'none' : 'custom',
                                   resizePixelsExpanded: false,
                                 })
                               }}
                               className={clsx(
                                 'min-w-0 rounded-md border py-2 text-center text-xs font-medium transition-colors',
-                                active
+                                options.resizeMode === 'percent' &&
+                                  options.resizePercentPreset === 'custom'
                                   ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
                                   : 'border-[#3d3d3d] bg-[#121212] text-gray-300 hover:border-blue-500/40 hover:bg-[#1e1e1e]',
                               )}
                             >
-                              {label}
+                              自定义
                             </button>
-                          )
-                        })}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const active =
-                              options.resizeMode === 'percent' &&
-                              options.resizePercentPreset === 'custom'
-                            onChange({
-                              ...options,
-                              resizeMode: 'percent',
-                              resizePercentPreset: active ? 'none' : 'custom',
-                              resizePixelsExpanded: false,
-                            })
-                          }}
-                          className={clsx(
-                            'min-w-0 rounded-md border py-2 text-center text-xs font-medium transition-colors',
-                            options.resizeMode === 'percent' &&
-                              options.resizePercentPreset === 'custom'
-                              ? 'border-blue-500/60 bg-blue-500/15 text-blue-200'
-                              : 'border-[#3d3d3d] bg-[#121212] text-gray-300 hover:border-blue-500/40 hover:bg-[#1e1e1e]',
-                          )}
-                        >
-                          自定义
-                        </button>
+                          </div>
+                          {options.resizePercentPreset === 'custom' ? (
+                            <div className="flex min-w-0 items-center gap-2">
+                              <input
+                                type="number"
+                                min={1}
+                                max={400}
+                                step={1}
+                                value={options.resizeCustomPercentStr}
+                                onChange={(e) =>
+                                  updateOption('resizeCustomPercentStr', e.target.value)
+                                }
+                                className="min-w-0 max-w-full flex-1 rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                              />
+                              <span className="shrink-0 text-sm text-gray-500">%</span>
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <div className="min-w-0 space-y-2">
+                          <div className="grid min-w-0 grid-cols-[1fr_auto_1fr] items-center gap-2">
+                            <input
+                              type="number"
+                              placeholder="宽"
+                              value={options.width}
+                              onChange={(e) => updateOption('width', e.target.value)}
+                              className="min-w-0 max-w-full rounded-md border border-[#3d3d3d] bg-[#121212] px-2 py-2 text-sm text-white placeholder-gray-600 focus:border-blue-500 focus:outline-none"
+                            />
+                            <span className="shrink-0 px-0.5 text-center text-gray-500">×</span>
+                            <input
+                              type="number"
+                              placeholder="高"
+                              value={options.height}
+                              onChange={(e) => updateOption('height', e.target.value)}
+                              className="min-w-0 max-w-full rounded-md border border-[#3d3d3d] bg-[#121212] px-2 py-2 text-sm text-white placeholder-gray-600 focus:border-blue-500 focus:outline-none"
+                            />
+                          </div>
+                          <label className="flex cursor-pointer items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={options.keepAspectRatio}
+                              onChange={(e) => updateOption('keepAspectRatio', e.target.checked)}
+                              className="rounded border-[#3d3d3d] bg-[#121212] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                            />
+                            <span className="text-sm text-gray-400">保持宽高比</span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#141414]">
+                  <div className="flex items-center justify-between gap-3 px-2.5 py-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <Sparkles className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                      <span className="text-sm font-medium text-gray-200" title="AI 自动抠图">
+                        去除背景
+                      </span>
+                    </div>
+                    <PanelToggle
+                      checked={options.removeBackground}
+                      onChange={(v) => updateOption('removeBackground', v)}
+                      ariaLabel="去除背景"
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#141414]">
+                  <div className="flex items-center justify-between gap-3 px-2.5 py-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <SquareDashed className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                      <span
+                        className="min-w-0 text-sm font-medium text-gray-200"
+                        title="将选中矩形区域清除为透明"
+                      >
+                        固定透明区域
+                      </span>
+                    </div>
+                    <PanelToggle
+                      checked={options.clearFixedWatermark}
+                      onChange={(v) => updateOption('clearFixedWatermark', v)}
+                      ariaLabel="固定透明区域"
+                    />
+                  </div>
+                  {options.clearFixedWatermark ? (
+                    <div className="border-t border-[#2d2d2d] px-2.5 pb-2.5 pt-2">
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <label className="text-gray-500">
+                          左 %
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            value={options.watermarkLeftPct}
+                            onChange={(e) => updateOption('watermarkLeftPct', e.target.value)}
+                            className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
+                          />
+                        </label>
+                        <label className="text-gray-500">
+                          上 %
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            value={options.watermarkTopPct}
+                            onChange={(e) => updateOption('watermarkTopPct', e.target.value)}
+                            className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
+                          />
+                        </label>
+                        <label className="text-gray-500">
+                          宽 %
+                          <input
+                            type="number"
+                            min={0.5}
+                            max={100}
+                            step={0.1}
+                            value={options.watermarkWidthPct}
+                            onChange={(e) => updateOption('watermarkWidthPct', e.target.value)}
+                            className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
+                          />
+                        </label>
+                        <label className="text-gray-500">
+                          高 %
+                          <input
+                            type="number"
+                            min={0.5}
+                            max={100}
+                            step={0.1}
+                            value={options.watermarkHeightPct}
+                            onChange={(e) => updateOption('watermarkHeightPct', e.target.value)}
+                            className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
+                          />
+                        </label>
                       </div>
-                      {options.resizePercentPreset === 'custom' ? (
-                        <div className="flex min-w-0 items-center gap-2">
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#141414]">
+                  <div className="flex items-center justify-between gap-3 px-2.5 py-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <LayoutGrid className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                      <span
+                        className="min-w-0 text-sm font-medium text-gray-200"
+                        title="按行数与列数均分切片"
+                      >
+                        网格切图
+                      </span>
+                    </div>
+                    <PanelToggle
+                      checked={options.sliceEnabled}
+                      onChange={(v) => {
+                        const updates: Partial<ProcessOptions> = { sliceEnabled: v }
+                        if (v) {
+                          updates.overwriteOriginal = false
+                          const rows = parseInt(options.sliceRows, 10)
+                          const cols = parseInt(options.sliceCols, 10)
+                          if (
+                            options.sliceYLines === undefined &&
+                            Number.isFinite(rows) &&
+                            rows > 0
+                          ) {
+                            updates.sliceYLines =
+                              rows > 1
+                                ? Array.from({ length: rows - 1 }, (_, i) => (i + 1) / rows)
+                                : []
+                          }
+                          if (
+                            options.sliceXLines === undefined &&
+                            Number.isFinite(cols) &&
+                            cols > 0
+                          ) {
+                            updates.sliceXLines =
+                              cols > 1
+                                ? Array.from({ length: cols - 1 }, (_, i) => (i + 1) / cols)
+                                : []
+                          }
+                        }
+                        onChange({ ...options, ...updates })
+                      }}
+                      ariaLabel="网格切图"
+                    />
+                  </div>
+                  {options.sliceEnabled ? (
+                    <div className="border-t border-[#2d2d2d] px-2.5 pb-2.5 pt-2">
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <label className="text-gray-500">
+                          行数
                           <input
                             type="number"
                             min={1}
-                            max={400}
+                            max={64}
                             step={1}
-                            value={options.resizeCustomPercentStr}
-                            onChange={(e) => updateOption('resizeCustomPercentStr', e.target.value)}
-                            className="min-w-0 max-w-full flex-1 rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                            value={options.sliceRows}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              const rows = parseInt(val, 10)
+                              let yLines: number[] | undefined
+                              if (Number.isFinite(rows) && rows > 1) {
+                                yLines = Array.from({ length: rows - 1 }, (_, i) => (i + 1) / rows)
+                              } else if (rows === 1) {
+                                yLines = []
+                              }
+                              onChange({ ...options, sliceRows: val, sliceYLines: yLines })
+                            }}
+                            className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
                           />
-                          <span className="shrink-0 text-sm text-gray-500">%</span>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <div className="min-w-0 space-y-2">
-                      <div className="grid min-w-0 grid-cols-[1fr_auto_1fr] items-center gap-2">
-                        <input
-                          type="number"
-                          placeholder="宽"
-                          value={options.width}
-                          onChange={(e) => updateOption('width', e.target.value)}
-                          className="min-w-0 max-w-full rounded-md border border-[#3d3d3d] bg-[#121212] px-2 py-2 text-sm text-white placeholder-gray-600 focus:border-blue-500 focus:outline-none"
-                        />
-                        <span className="shrink-0 px-0.5 text-center text-gray-500">×</span>
-                        <input
-                          type="number"
-                          placeholder="高"
-                          value={options.height}
-                          onChange={(e) => updateOption('height', e.target.value)}
-                          className="min-w-0 max-w-full rounded-md border border-[#3d3d3d] bg-[#121212] px-2 py-2 text-sm text-white placeholder-gray-600 focus:border-blue-500 focus:outline-none"
-                        />
+                        </label>
+                        <label className="text-gray-500">
+                          列数
+                          <input
+                            type="number"
+                            min={1}
+                            max={64}
+                            step={1}
+                            value={options.sliceCols}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              const cols = parseInt(val, 10)
+                              let xLines: number[] | undefined
+                              if (Number.isFinite(cols) && cols > 1) {
+                                xLines = Array.from({ length: cols - 1 }, (_, i) => (i + 1) / cols)
+                              } else if (cols === 1) {
+                                xLines = []
+                              }
+                              onChange({ ...options, sliceCols: val, sliceXLines: xLines })
+                            }}
+                            className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
+                          />
+                        </label>
                       </div>
-                      <label className="flex cursor-pointer items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={options.keepAspectRatio}
-                          onChange={(e) => updateOption('keepAspectRatio', e.target.checked)}
-                          className="rounded border-[#3d3d3d] bg-[#121212] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
-                        />
-                        <span className="text-sm text-gray-400">保持宽高比</span>
-                      </label>
                     </div>
-                  )}
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
 
-            <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
-              <div className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <Sparkles className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
-                  <span className="text-sm font-medium text-gray-200" title="AI 自动抠图">
-                    去除背景
-                  </span>
-                </div>
-                <PanelToggle
-                  checked={options.removeBackground}
-                  onChange={(v) => updateOption('removeBackground', v)}
-                  ariaLabel="去除背景"
-                />
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
-              <div className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <SquareDashed className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
-                  <span
-                    className="min-w-0 text-sm font-medium text-gray-200"
-                    title="将选中矩形区域清除为透明"
-                  >
-                    固定透明区域
-                  </span>
-                </div>
-                <PanelToggle
-                  checked={options.clearFixedWatermark}
-                  onChange={(v) => updateOption('clearFixedWatermark', v)}
-                  ariaLabel="固定透明区域"
-                />
-              </div>
-              {options.clearFixedWatermark ? (
-                <div className="border-t border-[#2d2d2d] px-3 pb-3 pt-2">
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <label className="text-gray-500">
-                      左 %
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={0.1}
-                        value={options.watermarkLeftPct}
-                        onChange={(e) => updateOption('watermarkLeftPct', e.target.value)}
-                        className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
-                      />
+                <div className="overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#141414] px-2.5 py-2">
+                  <div className="flex min-w-0 flex-nowrap items-center gap-2">
+                    <label
+                      htmlFor="image-output-format"
+                      className="shrink-0 text-[11px] font-medium text-gray-500"
+                    >
+                      格式
                     </label>
-                    <label className="text-gray-500">
-                      上 %
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={0.1}
-                        value={options.watermarkTopPct}
-                        onChange={(e) => updateOption('watermarkTopPct', e.target.value)}
-                        className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
-                      />
+                    <select
+                      id="image-output-format"
+                      value={options.format}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        if (isOutputFormatOption(v)) updateOption('format', v)
+                      }}
+                      className="w-[6rem] shrink-0 rounded-lg border border-[#383838] bg-[#101010] py-1.5 pl-2 pr-7 text-sm text-white focus:border-blue-500/55 focus:outline-none focus:ring-2 focus:ring-blue-500/15"
+                      title={IMAGE_FORMAT_OPTION_LABEL[options.format]}
+                    >
+                      <option value="original">与原图相同</option>
+                      <option value="png">PNG</option>
+                      <option value="jpeg">JPEG</option>
+                      <option value="webp">WebP</option>
+                      <option value="avif">AVIF</option>
+                    </select>
+                    <label
+                      htmlFor="image-output-quality"
+                      className="ml-1 shrink-0 text-[11px] font-medium text-gray-500"
+                    >
+                      质量
                     </label>
-                    <label className="text-gray-500">
-                      宽 %
-                      <input
-                        type="number"
-                        min={0.5}
-                        max={100}
-                        step={0.1}
-                        value={options.watermarkWidthPct}
-                        onChange={(e) => updateOption('watermarkWidthPct', e.target.value)}
-                        className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
-                      />
-                    </label>
-                    <label className="text-gray-500">
-                      高 %
-                      <input
-                        type="number"
-                        min={0.5}
-                        max={100}
-                        step={0.1}
-                        value={options.watermarkHeightPct}
-                        onChange={(e) => updateOption('watermarkHeightPct', e.target.value)}
-                        className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
-                      />
-                    </label>
+                    <input
+                      ref={qualitySliderRef}
+                      id="image-output-quality"
+                      type="range"
+                      min="1"
+                      max="100"
+                      value={options.quality}
+                      onChange={(e) => updateOption('quality', parseInt(e.target.value))}
+                      className="min-w-[5rem] flex-1 accent-blue-500"
+                      aria-valuetext={`${options.quality}%`}
+                    />
+                    <span className="w-9 shrink-0 text-right text-xs tabular-nums text-gray-400">
+                      {options.quality}%
+                    </span>
                   </div>
                 </div>
-              ) : null}
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818]">
-              <div className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <LayoutGrid className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
-                  <span
-                    className="min-w-0 text-sm font-medium text-gray-200"
-                    title="按行数与列数均分切片"
-                  >
-                    网格切图
-                  </span>
-                </div>
-                <PanelToggle
-                  checked={options.sliceEnabled}
-                  onChange={(v) => {
-                    const updates: Partial<ProcessOptions> = { sliceEnabled: v }
-                    if (v) {
-                      updates.overwriteOriginal = false
-                      const rows = parseInt(options.sliceRows, 10)
-                      const cols = parseInt(options.sliceCols, 10)
-                      if (options.sliceYLines === undefined && Number.isFinite(rows) && rows > 0) {
-                        updates.sliceYLines =
-                          rows > 1 ? Array.from({ length: rows - 1 }, (_, i) => (i + 1) / rows) : []
-                      }
-                      if (options.sliceXLines === undefined && Number.isFinite(cols) && cols > 0) {
-                        updates.sliceXLines =
-                          cols > 1 ? Array.from({ length: cols - 1 }, (_, i) => (i + 1) / cols) : []
-                      }
-                    }
-                    onChange({ ...options, ...updates })
-                  }}
-                  ariaLabel="网格切图"
-                />
-              </div>
-              {options.sliceEnabled ? (
-                <div className="border-t border-[#2d2d2d] px-3 pb-3 pt-2">
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <label className="text-gray-500">
-                      行数
-                      <input
-                        type="number"
-                        min={1}
-                        max={64}
-                        step={1}
-                        value={options.sliceRows}
-                        onChange={(e) => {
-                          const val = e.target.value
-                          const rows = parseInt(val, 10)
-                          let yLines: number[] | undefined
-                          if (Number.isFinite(rows) && rows > 1) {
-                            yLines = Array.from({ length: rows - 1 }, (_, i) => (i + 1) / rows)
-                          } else if (rows === 1) {
-                            yLines = []
-                          }
-                          onChange({ ...options, sliceRows: val, sliceYLines: yLines })
-                        }}
-                        className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
-                      />
-                    </label>
-                    <label className="text-gray-500">
-                      列数
-                      <input
-                        type="number"
-                        min={1}
-                        max={64}
-                        step={1}
-                        value={options.sliceCols}
-                        onChange={(e) => {
-                          const val = e.target.value
-                          const cols = parseInt(val, 10)
-                          let xLines: number[] | undefined
-                          if (Number.isFinite(cols) && cols > 1) {
-                            xLines = Array.from({ length: cols - 1 }, (_, i) => (i + 1) / cols)
-                          } else if (cols === 1) {
-                            xLines = []
-                          }
-                          onChange({ ...options, sliceCols: val, sliceXLines: xLines })
-                        }}
-                        className={clsx(GEOMETRY_NUM_FIELD, 'mt-1.5')}
-                      />
-                    </label>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-[#2d2d2d] bg-[#181818] px-3 py-2.5">
-              <div className="flex min-w-0 flex-nowrap items-center gap-2">
-                <label
-                  htmlFor="image-output-format"
-                  className="shrink-0 text-[11px] font-medium text-gray-500"
-                >
-                  格式
-                </label>
-                <select
-                  id="image-output-format"
-                  value={options.format}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    if (isOutputFormatOption(v)) updateOption('format', v)
-                  }}
-                  className="w-[6rem] shrink-0 rounded-lg border border-[#383838] bg-[#101010] py-1.5 pl-2 pr-7 text-sm text-white focus:border-blue-500/55 focus:outline-none focus:ring-2 focus:ring-blue-500/15"
-                  title={IMAGE_FORMAT_OPTION_LABEL[options.format]}
-                >
-                  <option value="original">与原图相同</option>
-                  <option value="png">PNG</option>
-                  <option value="jpeg">JPEG</option>
-                  <option value="webp">WebP</option>
-                  <option value="avif">AVIF</option>
-                </select>
-                <label
-                  htmlFor="image-output-quality"
-                  className="ml-1 shrink-0 text-[11px] font-medium text-gray-500"
-                >
-                  质量
-                </label>
-                <input
-                  ref={qualitySliderRef}
-                  id="image-output-quality"
-                  type="range"
-                  min="1"
-                  max="100"
-                  value={options.quality}
-                  onChange={(e) => updateOption('quality', parseInt(e.target.value))}
-                  className="min-w-[5rem] flex-1 accent-blue-500"
-                  aria-valuetext={`${options.quality}%`}
-                />
-                <span className="w-9 shrink-0 text-right text-xs tabular-nums text-gray-400">
-                  {options.quality}%
-                </span>
               </div>
             </div>
           </>
@@ -963,32 +986,34 @@ export function SettingsPanel({
                 </span>
               </span>
             </label>
-            <label className="text-sm font-medium text-gray-400">输出目录</label>
-            <div className="flex gap-2">
-              <div
-                className={clsx(
-                  'flex-1 truncate rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-sm text-gray-400',
-                  options.overwriteOriginal && 'opacity-60',
-                )}
-                title={
-                  options.overwriteOriginal
-                    ? '已启用覆盖原图时不需要输出目录'
-                    : options.outputDir || '未选择'
-                }
-              >
-                {options.overwriteOriginal
-                  ? '（已启用覆盖原图）'
-                  : options.outputDir || '请选择文件夹…'}
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-sm font-medium text-gray-400">输出目录</span>
+              <div className="flex min-w-0 flex-1 gap-2">
+                <div
+                  className={clsx(
+                    'min-w-0 flex-1 truncate rounded-md border border-[#3d3d3d] bg-[#121212] px-3 py-2 text-sm text-gray-400',
+                    options.overwriteOriginal && 'opacity-60',
+                  )}
+                  title={
+                    options.overwriteOriginal
+                      ? '已启用覆盖原图时不需要输出目录'
+                      : options.outputDir || '未选择'
+                  }
+                >
+                  {options.overwriteOriginal
+                    ? '（已启用覆盖原图）'
+                    : options.outputDir || '请选择文件夹…'}
+                </div>
+                <button
+                  type="button"
+                  onClick={onSelectOutputDir}
+                  disabled={options.overwriteOriginal || isProcessing}
+                  className="rounded-md bg-[#2d2d2d] p-2 text-gray-300 transition-colors hover:bg-[#3d3d3d] disabled:cursor-not-allowed disabled:opacity-50"
+                  title="选择文件夹"
+                >
+                  <FolderOpen className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={onSelectOutputDir}
-                disabled={options.overwriteOriginal || isProcessing}
-                className="rounded-md bg-[#2d2d2d] p-2 text-gray-300 transition-colors hover:bg-[#3d3d3d] disabled:cursor-not-allowed disabled:opacity-50"
-                title="选择文件夹"
-              >
-                <FolderOpen className="w-5 h-5" />
-              </button>
             </div>
           </div>
           {isProcessing && batchProgress && batchProgress.total > 1 ? (

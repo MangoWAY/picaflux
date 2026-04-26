@@ -1,8 +1,7 @@
 import type {
-  VideoFlipUi,
+  TranscodeQualityTier,
   VideoModeEnabledMap,
   VideoProcessFormState,
-  VideoRotationUi,
   VideoWorkbenchMode,
 } from './videoFormPayload'
 import { createEmptyModeEnabled } from './videoFormPayload'
@@ -35,13 +34,12 @@ const TRANSCODE: ReadonlySet<VideoProcessFormState['transcodePreset']> = new Set
   'high_quality_mp4',
 ])
 
-const ROT: ReadonlySet<VideoRotationUi> = new Set(['0', '90', '180', '270'])
-const FLIP: ReadonlySet<VideoFlipUi> = new Set(['none', 'horizontal', 'vertical', 'both'])
-
 export const DEFAULT_VIDEO_PRESET_STORED: VideoProcessPresetStored = {
   mode: 'transcode',
   modeEnabled: createEmptyModeEnabled(),
   transcodePreset: 'web_mp4',
+  transcodeQualityTier: 'medium',
+  transcodeCrfStr: '23',
   maxWidthStr: '1280',
   startSecStr: '0',
   durationSecStr: '10',
@@ -53,10 +51,10 @@ export const DEFAULT_VIDEO_PRESET_STORED: VideoProcessPresetStored = {
   gifFpsStr: '10',
   gifMaxWidthStr: '480',
   webpQualityStr: '75',
-  videoTransformEnabled: true,
+  videoTransformEnabled: false,
   videoRotation: '0',
   videoFlip: 'none',
-  playbackSpeedStr: '1.5',
+  playbackSpeedStr: '1',
 }
 
 function pickStr(v: unknown, fallback: string): string {
@@ -64,9 +62,13 @@ function pickStr(v: unknown, fallback: string): string {
 }
 
 function pickMode(v: unknown): VideoWorkbenchMode {
-  return typeof v === 'string' && MODES.has(v as VideoWorkbenchMode)
-    ? (v as VideoWorkbenchMode)
-    : DEFAULT_VIDEO_PRESET_STORED.mode
+  if (typeof v !== 'string' || !MODES.has(v as VideoWorkbenchMode)) {
+    return DEFAULT_VIDEO_PRESET_STORED.mode
+  }
+  const m = v as VideoWorkbenchMode
+  /** 裁剪已并入预览时间轴，旧预设中的独立 trim 模式映射为默认 */
+  if (m === 'trim') return DEFAULT_VIDEO_PRESET_STORED.mode
+  return m
 }
 
 function pickTranscodePreset(v: unknown): VideoProcessFormState['transcodePreset'] {
@@ -75,28 +77,22 @@ function pickTranscodePreset(v: unknown): VideoProcessFormState['transcodePreset
     : DEFAULT_VIDEO_PRESET_STORED.transcodePreset
 }
 
-function pickRotation(v: unknown): VideoRotationUi {
-  return typeof v === 'string' && ROT.has(v as VideoRotationUi)
-    ? (v as VideoRotationUi)
-    : DEFAULT_VIDEO_PRESET_STORED.videoRotation
+function isTranscodeQualityTier(v: unknown): v is TranscodeQualityTier {
+  return v === 'low' || v === 'medium' || v === 'high' || v === 'custom'
 }
 
-function pickFlip(v: unknown): VideoFlipUi {
-  return typeof v === 'string' && FLIP.has(v as VideoFlipUi)
-    ? (v as VideoFlipUi)
-    : DEFAULT_VIDEO_PRESET_STORED.videoFlip
+function pickTranscodeQualityTier(
+  rawTier: unknown,
+  legacyTranscodePreset: VideoProcessFormState['transcodePreset'],
+): TranscodeQualityTier {
+  if (rawTier === 'remux') return 'medium'
+  if (isTranscodeQualityTier(rawTier)) return rawTier
+  if (legacyTranscodePreset === 'copy_streams') return 'medium'
+  if (legacyTranscodePreset === 'high_quality_mp4') return 'high'
+  return DEFAULT_VIDEO_PRESET_STORED.transcodeQualityTier
 }
 
-function pickTransformEnabled(v: unknown): boolean {
-  if (typeof v === 'boolean') return v
-  if (v === 'false' || v === 0) return false
-  return DEFAULT_VIDEO_PRESET_STORED.videoTransformEnabled
-}
-
-function pickModeEnabledMap(
-  d: Record<string, unknown>,
-  legacyMode: VideoWorkbenchMode,
-): VideoModeEnabledMap {
+function pickModeEnabledMap(d: Record<string, unknown>): VideoModeEnabledMap {
   const out = createEmptyModeEnabled()
   if (
     'modeEnabled' in d &&
@@ -112,10 +108,19 @@ function pickModeEnabledMap(
         out[m] = false
       }
     }
+    out.extract_frame = false
+    out.trim = false
+    out.webp_anim = false
     return out
   }
   if ('mode' in d && typeof d.mode === 'string' && MODES.has(d.mode as VideoWorkbenchMode)) {
-    out[legacyMode] = true
+    const lm = d.mode as VideoWorkbenchMode
+    if (lm !== 'extract_frame' && lm !== 'trim') {
+      out[lm] = true
+    }
+    out.trim = false
+    out.webp_anim = false
+    return out
   }
   return out
 }
@@ -138,10 +143,13 @@ export function sanitizeVideoPresetStored(raw: unknown): VideoProcessPresetStore
   const base = DEFAULT_VIDEO_PRESET_STORED
 
   const legacyMode = pickMode(d.mode)
+  const transcodePreset = pickTranscodePreset(d.transcodePreset)
   return {
     mode: legacyMode,
-    modeEnabled: pickModeEnabledMap(d, legacyMode),
-    transcodePreset: pickTranscodePreset(d.transcodePreset),
+    modeEnabled: pickModeEnabledMap(d),
+    transcodePreset,
+    transcodeQualityTier: pickTranscodeQualityTier(d.transcodeQualityTier, transcodePreset),
+    transcodeCrfStr: pickStr(d.transcodeCrfStr, base.transcodeCrfStr),
     maxWidthStr: pickStr(d.maxWidthStr, base.maxWidthStr),
     startSecStr: pickStr(d.startSecStr, base.startSecStr),
     durationSecStr: pickStr(d.durationSecStr, base.durationSecStr),
@@ -153,9 +161,10 @@ export function sanitizeVideoPresetStored(raw: unknown): VideoProcessPresetStore
     gifFpsStr: pickStr(d.gifFpsStr, base.gifFpsStr),
     gifMaxWidthStr: pickStr(d.gifMaxWidthStr, base.gifMaxWidthStr),
     webpQualityStr: pickStr(d.webpQualityStr, base.webpQualityStr),
-    videoTransformEnabled: pickTransformEnabled(d.videoTransformEnabled),
-    videoRotation: pickRotation(d.videoRotation),
-    videoFlip: pickFlip(d.videoFlip),
+    /** 画面旋转/翻转已自界面移除，读入预设时一律关闭 */
+    videoTransformEnabled: false,
+    videoRotation: '0',
+    videoFlip: 'none',
     playbackSpeedStr: pickStr(d.playbackSpeedStr, base.playbackSpeedStr),
   }
 }

@@ -11,6 +11,7 @@ import {
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
+import fs from 'node:fs/promises'
 import { update } from './update'
 import {
   processImage,
@@ -28,6 +29,7 @@ import {
   getVideoThumbnailDataUrl,
   getVideoTimelineThumbnails,
   cancelVideoTask,
+  exportVideoPreviewFrameToPath,
 } from './video-processor'
 import { getModel3dFileInfo, save3dThumbnailPng, processGlbConvert } from './gltf-3d-processor'
 import {
@@ -378,6 +380,57 @@ ipcMain.handle('video:getTimelineThumbnails', async (_, inputPath: unknown, opts
 ipcMain.handle('video:cancel', (_, taskId: string) => {
   if (typeof taskId !== 'string') return false
   return cancelVideoTask(taskId)
+})
+
+ipcMain.handle('video:savePreviewFrame', async (_, payload: unknown) => {
+  if (!win) {
+    return { success: false, canceled: false, error: '窗口未就绪' }
+  }
+  const o = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}
+  const rec = o as Record<string, unknown>
+  const inputPath = typeof rec.inputPath === 'string' ? rec.inputPath.trim() : ''
+  const timeRaw = rec.timeSec
+  const timeSec =
+    typeof timeRaw === 'number'
+      ? timeRaw
+      : typeof timeRaw === 'string'
+        ? parseFloat(String(timeRaw).trim().replace(',', '.'))
+        : NaN
+  if (!inputPath || !Number.isFinite(timeSec) || timeSec < 0) {
+    return { success: false, canceled: false, error: '参数无效' }
+  }
+  const st = await fs.stat(inputPath).catch(() => null)
+  if (!st?.isFile()) {
+    return { success: false, canceled: false, error: '视频文件不存在' }
+  }
+  const rawName =
+    typeof rec.defaultFileName === 'string' && rec.defaultFileName.trim()
+      ? path.basename(rec.defaultFileName.trim())
+      : 'frame.png'
+  const safeName =
+    rawName
+      .split('')
+      .map((ch) => {
+        const c = ch.charCodeAt(0)
+        if (c < 32 || /[<>:"/\\|?*]/.test(ch)) return '_'
+        return ch
+      })
+      .join('')
+      .slice(0, 200) || 'frame.png'
+  const defaultPath = path.join(path.dirname(inputPath), safeName)
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath,
+    filters: [
+      { name: 'PNG', extensions: ['png'] },
+      { name: 'JPEG', extensions: ['jpg', 'jpeg'] },
+    ],
+  })
+  if (canceled || !filePath) {
+    return { success: false, canceled: true }
+  }
+  const ext = path.extname(filePath).toLowerCase()
+  const format: 'png' | 'jpeg' = ext === '.jpg' || ext === '.jpeg' ? 'jpeg' : 'png'
+  return await exportVideoPreviewFrameToPath(inputPath, timeSec, filePath, format)
 })
 
 const MODEL_3D_EXT = ['glb', 'gltf'] as const
