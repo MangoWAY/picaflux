@@ -6,6 +6,8 @@ interface Window {
   picafluxAPI: {
     openFiles: () => Promise<string[]>
     openDirectory: () => Promise<string | null>
+    /** 目录内图片路径，按文件名自然序排序，供序列帧预览 */
+    listImageSequenceInDirectory: (dirPath: string) => Promise<string[]>
     processImage: (
       inputPath: string,
       outputDir: string,

@@ -16,13 +16,13 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   ]
 
   return (
-    <div className="flex h-full min-h-0 w-64 shrink-0 flex-col border-r border-[#2d2d2d] bg-[#1e1e1e] text-gray-300">
-      <div className="p-6 flex items-center gap-2 text-white font-bold text-xl tracking-tight">
-        <Sparkles className="w-6 h-6 text-blue-500" />
-        PicaFlux
+    <div className="flex h-full min-h-0 w-52 shrink-0 flex-col border-r border-[#2d2d2d] bg-[#1e1e1e] text-gray-300">
+      <div className="flex items-center gap-2 px-3 py-3.5 text-lg font-bold tracking-tight text-white">
+        <Sparkles className="h-5 w-5 shrink-0 text-blue-500" />
+        <span className="min-w-0 truncate">PicaFlux</span>
       </div>
 
-      <nav className="flex-1 px-4 space-y-1">
+      <nav className="flex-1 space-y-0.5 px-2">
         {navItems.map((item) => {
           const Icon = item.icon
           const isActive = activeTab === item.id && activeTab !== 'settings'
@@ -31,32 +31,32 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
               key={item.id}
               onClick={() => setActiveTab(item.id)}
               className={clsx(
-                'w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium bg-transparent text-left',
+                'flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium transition-colors',
                 isActive
                   ? 'bg-blue-500/10 text-blue-500'
                   : 'text-gray-300 hover:bg-[#2d2d2d] hover:text-white',
               )}
             >
-              <Icon className="w-5 h-5" />
-              {item.label}
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 truncate">{item.label}</span>
             </button>
           )
         })}
       </nav>
 
-      <div className="p-4">
+      <div className="px-2 pb-3 pt-1">
         <button
           type="button"
           onClick={() => setActiveTab('settings')}
           className={clsx(
-            'w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium bg-transparent text-left',
+            'flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium transition-colors',
             activeTab === 'settings'
               ? 'bg-blue-500/10 text-blue-500'
               : 'text-gray-300 hover:bg-[#2d2d2d] hover:text-white',
           )}
         >
-          <Settings className="w-5 h-5" />
-          Settings
+          <Settings className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 truncate">Settings</span>
         </button>
       </div>
     </div>

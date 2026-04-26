@@ -71,8 +71,8 @@ export function ThreeStrip({
   )
 
   return (
-    <div className="flex h-full min-h-0 w-[220px] shrink-0 flex-col border-r border-[#2d2d2d] bg-[#181818]">
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-[#2d2d2d] px-3">
+    <div className="flex h-full min-h-0 w-[11.5rem] shrink-0 flex-col border-r border-[#2d2d2d] bg-[#181818]">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[#2d2d2d] px-2">
         <label
           className="flex cursor-pointer items-center gap-2 text-xs text-gray-400"
           title="全选 / 取消全选（用于批量处理）"
@@ -117,16 +117,16 @@ export function ThreeStrip({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
         {models.length === 0 ? (
           <p className="px-1 pt-2 text-center text-xs text-gray-600">暂无 3D 文件</p>
         ) : listMode === 'thumbnail' ? (
-          <ul className="flex flex-col gap-2">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {models.map((m) => {
               const isPreview = m.path === previewPath
               const isChecked = checkedPaths.has(m.path)
               return (
-                <li key={m.path}>
+                <li key={m.path} className="list-none">
                   <div
                     role="button"
                     tabIndex={0}
@@ -138,7 +138,7 @@ export function ThreeStrip({
                       }
                     }}
                     className={clsx(
-                      'group relative cursor-pointer rounded-lg border p-2 transition-colors',
+                      'group relative cursor-pointer rounded-lg border p-1.5 transition-colors',
                       isPreview
                         ? 'border-blue-500/60 bg-blue-500/10'
                         : 'border-[#2d2d2d] bg-[#1e1e1e] hover:border-[#3d3d3d]',
@@ -200,12 +200,12 @@ export function ThreeStrip({
             })}
           </ul>
         ) : (
-          <ul className="flex flex-col gap-0.5">
+          <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {models.map((m) => {
               const isPreview = m.path === previewPath
               const isChecked = checkedPaths.has(m.path)
               return (
-                <li key={m.path}>
+                <li key={m.path} className="list-none">
                   <div
                     role="button"
                     tabIndex={0}
@@ -246,7 +246,7 @@ export function ThreeStrip({
                         m.status === 'error' && 'text-red-400',
                       )}
                     >
-                      {m.status === 'pending' ? '·' : statusLabel(m.status).slice(0, 1)}
+                      {m.status === 'pending' ? '' : statusLabel(m.status).slice(0, 1)}
                     </span>
                     <button
                       type="button"

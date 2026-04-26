@@ -209,6 +209,25 @@ ipcMain.handle('dialog:openDirectory', async () => {
   }
 })
 
+const SEQUENCE_IMAGE_NAME_RE = /\.(jpe?g|png|webp|avif)$/i
+
+ipcMain.handle('image:listSequenceInDirectory', async (_, dirPath: unknown) => {
+  if (typeof dirPath !== 'string' || !dirPath.trim()) return []
+  const resolved = path.resolve(dirPath.trim())
+  try {
+    const st = await fs.stat(resolved)
+    if (!st.isDirectory()) return []
+    const names = await fs.readdir(resolved)
+    const paths = names
+      .filter((n) => SEQUENCE_IMAGE_NAME_RE.test(n))
+      .map((n) => path.join(resolved, n))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+    return paths
+  } catch {
+    return []
+  }
+})
+
 ipcMain.handle(
   'image:process',
   async (_, inputPath: string, outputDir: string, options: unknown) => {

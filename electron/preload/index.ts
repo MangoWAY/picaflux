@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 contextBridge.exposeInMainWorld('picafluxAPI', {
   openFiles: () => ipcRenderer.invoke('dialog:openFiles'),
   openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+  listImageSequenceInDirectory: (dirPath: string) =>
+    ipcRenderer.invoke('image:listSequenceInDirectory', dirPath) as Promise<string[]>,
   processImage: (inputPath: string, outputDir: string, options: unknown) =>
     ipcRenderer.invoke('image:process', inputPath, outputDir, options),
   sliceImageGrid: (inputPath: string, outputDir: string, options: unknown) =>

@@ -128,8 +128,8 @@ export function VideoStrip({
   )
 
   return (
-    <div className="flex h-full min-h-0 w-[220px] shrink-0 flex-col bg-[#181818]">
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-[#2d2d2d] px-3">
+    <div className="flex h-full min-h-0 w-[11.5rem] shrink-0 flex-col bg-[#181818]">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[#2d2d2d] px-2">
         <label
           className="flex cursor-pointer items-center gap-2 text-xs text-gray-400"
           title="全选 / 取消全选（用于批量处理）"
@@ -175,22 +175,23 @@ export function VideoStrip({
       </div>
 
       {concatMode ? (
-        <p className="shrink-0 border-b border-[#2d2d2d] px-3 py-1.5 text-[10px] leading-snug text-amber-500/90">
+        <p className="shrink-0 border-b border-[#2d2d2d] px-2 py-1.5 text-[10px] leading-snug text-amber-500/90">
           合并模式：列表顺序即为拼接顺序，可拖拽条目调整。
         </p>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
         {videos.length === 0 ? (
           <p className="px-1 pt-2 text-center text-xs text-gray-600">暂无视频</p>
         ) : listMode === 'thumbnail' ? (
-          <ul className="flex flex-col gap-2">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {videos.map((v, index) => {
               const isPreview = v.path === previewPath
               const isChecked = checkedPaths.has(v.path)
               return (
                 <li
                   key={v.path}
+                  className="list-none"
                   draggable={canReorder}
                   onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={handleDragOver}
@@ -207,7 +208,7 @@ export function VideoStrip({
                       }
                     }}
                     className={clsx(
-                      'group relative rounded-lg border p-2 transition-colors',
+                      'group relative rounded-lg border p-1.5 transition-colors',
                       canReorder ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
                       isPreview
                         ? 'border-blue-500/60 bg-blue-500/10'
@@ -314,13 +315,14 @@ export function VideoStrip({
             })}
           </ul>
         ) : (
-          <ul className="flex flex-col gap-0.5">
+          <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {videos.map((v, index) => {
               const isPreview = v.path === previewPath
               const isChecked = checkedPaths.has(v.path)
               return (
                 <li
                   key={v.path}
+                  className="list-none"
                   draggable={canReorder}
                   onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={handleDragOver}
@@ -402,7 +404,7 @@ export function VideoStrip({
                         v.status === 'error' && 'text-red-400',
                       )}
                     >
-                      {v.status === 'pending' ? '·' : statusLabel(v.status).slice(0, 1)}
+                      {v.status === 'pending' ? '' : statusLabel(v.status).slice(0, 1)}
                     </span>
                     <button
                       type="button"

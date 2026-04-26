@@ -72,8 +72,8 @@ export function ImageStrip({
   )
 
   return (
-    <div className="flex h-full min-h-0 w-[220px] shrink-0 flex-col bg-[#181818]">
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-[#2d2d2d] px-3">
+    <div className="flex h-full min-h-0 w-[11.5rem] shrink-0 flex-col bg-[#181818]">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[#2d2d2d] px-2">
         <label
           className="flex cursor-pointer items-center gap-2 text-xs text-gray-400"
           title="全选 / 取消全选（用于批量处理）"
@@ -118,16 +118,16 @@ export function ImageStrip({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
         {images.length === 0 ? (
           <p className="px-1 pt-2 text-center text-xs text-gray-600">暂无图片</p>
         ) : listMode === 'thumbnail' ? (
-          <ul className="flex flex-col gap-2">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {images.map((img) => {
               const isPreview = img.path === previewPath
               const isChecked = checkedPaths.has(img.path)
               return (
-                <li key={img.path}>
+                <li key={img.path} className="list-none">
                   <div
                     role="button"
                     tabIndex={0}
@@ -139,7 +139,7 @@ export function ImageStrip({
                       }
                     }}
                     className={clsx(
-                      'group relative cursor-pointer rounded-lg border p-2 transition-colors',
+                      'group relative cursor-pointer rounded-lg border p-1.5 transition-colors',
                       isPreview
                         ? 'border-blue-500/60 bg-blue-500/10'
                         : 'border-[#2d2d2d] bg-[#1e1e1e] hover:border-[#3d3d3d]',
@@ -232,12 +232,12 @@ export function ImageStrip({
             })}
           </ul>
         ) : (
-          <ul className="flex flex-col gap-0.5">
+          <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {images.map((img) => {
               const isPreview = img.path === previewPath
               const isChecked = checkedPaths.has(img.path)
               return (
-                <li key={img.path}>
+                <li key={img.path} className="list-none">
                   <div
                     role="button"
                     tabIndex={0}
@@ -295,7 +295,7 @@ export function ImageStrip({
                         img.status === 'error' && 'text-red-400',
                       )}
                     >
-                      {img.status === 'pending' ? '·' : statusLabel(img.status).slice(0, 1)}
+                      {img.status === 'pending' ? '' : statusLabel(img.status).slice(0, 1)}
                     </span>
                     <button
                       type="button"

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { UploadCloud, FileImage, Hand } from 'lucide-react'
+import { UploadCloud, FileImage, Hand, FolderOpen, Pause, Play } from 'lucide-react'
 import type { ImageFile } from './ImageStrip'
 import type { WatermarkRegionPercents } from '@/lib/imageProcessPayload'
 import { clampCropNorm } from '@/lib/cropNorm'
@@ -71,8 +71,18 @@ interface ImagePreviewPaneProps {
   /** 裁切透明边：在预览中框出保留区域（与导出管线顺序一致：先裁剪再 trim） */
   trimTransparent?: boolean
   trimPaddingPx?: string
-  /** 在预览区用 ← / → 切换列表中的上一张 / 下一张（与左侧顺序一致） */
+  /** 在预览区用 ← / → 切换列表中的上一张 / 下一张（按文件名自然序，与序列播放一致） */
   onNavigatePreview?: (delta: -1 | 1) => void
+  /** 打开文件夹并将其中图片按序加入队列（序列帧） */
+  onOpenSequenceFolder?: () => void
+  /** 至少 2 张图时显示：播放、帧率与当前帧号 */
+  sequenceControls?: {
+    playing: boolean
+    fps: number
+    frameLabel: string
+    onPlayingChange: (playing: boolean) => void
+    onFpsChange: (fps: number) => void
+  } | null
 }
 
 type CropDragHandle = 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se'
@@ -167,6 +177,8 @@ export function ImagePreviewPane({
   trimTransparent = false,
   trimPaddingPx = '2',
   onNavigatePreview,
+  onOpenSequenceFolder,
+  sequenceControls = null,
 }: ImagePreviewPaneProps) {
   const collectPathsFromDataTransfer = useCallback((dt: DataTransfer): string[] => {
     const paths: string[] = []
@@ -639,23 +651,28 @@ export function ImagePreviewPane({
   }, [imgLayout?.scale, zoom])
 
   useEffect(() => {
-    if (!onNavigatePreview || images.length === 0) return
+    if ((!onNavigatePreview && !sequenceControls) || images.length === 0) return
     const onKeyDown = (e: KeyboardEvent) => {
       const elTarget = e.target as HTMLElement | null
       if (elTarget?.closest('input, textarea, select, [contenteditable="true"]')) return
       if (e.key === 'ArrowLeft') {
         e.preventDefault()
-        onNavigatePreview(-1)
+        onNavigatePreview?.(-1)
         return
       }
       if (e.key === 'ArrowRight') {
         e.preventDefault()
-        onNavigatePreview(1)
+        onNavigatePreview?.(1)
+        return
+      }
+      if (e.key === ' ' && sequenceControls && images.length >= 2) {
+        e.preventDefault()
+        sequenceControls.onPlayingChange(!sequenceControls.playing)
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onNavigatePreview, images.length])
+  }, [onNavigatePreview, sequenceControls, images.length])
 
   return (
     <div
@@ -664,26 +681,82 @@ export function ImagePreviewPane({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#2d2d2d] px-6">
+      <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-[#2d2d2d] px-4 sm:px-6">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-white">图片预览</h1>
           {images.length > 0 && (
             <p
               className="truncate text-xs text-gray-500"
-              title="将使用右侧参数处理；键盘 ← → 切换预览"
+              title="将使用右侧参数处理；←→ 切帧；多图时空格播放/暂停"
             >
-              已选 {selectedCount}/{images.length} 张 · ←→ 切换预览
+              已选 {selectedCount}/{images.length} 张 · ←→ 切帧
+              {images.length >= 2 ? ' · 空格 播放/暂停' : ''}
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onAddImages}
-          className="shrink-0 rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-        >
-          添加图片
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {onOpenSequenceFolder ? (
+            <button
+              type="button"
+              onClick={onOpenSequenceFolder}
+              className="inline-flex items-center gap-1 rounded-md border border-[#3d3d3d] bg-[#252525] px-2.5 py-1.5 text-xs font-medium text-gray-200 transition-colors hover:border-[#505050] hover:bg-[#2d2d2d] sm:gap-1.5 sm:px-3 sm:text-sm"
+              title="选择文件夹，将其中的图片按文件名排序后作为序列帧加入列表"
+            >
+              <FolderOpen className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+              <span className="hidden sm:inline">序列文件夹</span>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onAddImages}
+            className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 sm:px-4 sm:text-sm"
+          >
+            添加图片
+          </button>
+        </div>
       </div>
+
+      {sequenceControls ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[#2d2d2d] bg-[#1a1a1a] px-4 py-2 sm:px-6">
+          <span className="text-xs font-medium text-gray-400">序列帧预览</span>
+          <button
+            type="button"
+            onClick={() => sequenceControls.onPlayingChange(!sequenceControls.playing)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[#3d3d3d] bg-[#252525] px-2.5 py-1 text-xs font-medium text-gray-200 hover:bg-[#2d2d2d]"
+            aria-pressed={sequenceControls.playing}
+          >
+            {sequenceControls.playing ? (
+              <>
+                <Pause className="h-3.5 w-3.5" />
+                暂停
+              </>
+            ) : (
+              <>
+                <Play className="h-3.5 w-3.5" />
+                播放
+              </>
+            )}
+          </button>
+          <label className="flex items-center gap-1.5 text-xs text-gray-400">
+            <span>FPS</span>
+            <input
+              type="number"
+              min={1}
+              max={60}
+              step={1}
+              value={sequenceControls.fps}
+              disabled={sequenceControls.playing}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10)
+                const v = Number.isFinite(n) ? Math.min(60, Math.max(1, n)) : 12
+                sequenceControls.onFpsChange(v)
+              }}
+              className="w-14 rounded border border-[#3d3d3d] bg-[#121212] px-1.5 py-0.5 text-right text-xs text-white disabled:opacity-50"
+            />
+          </label>
+          <span className="text-xs tabular-nums text-gray-500">{sequenceControls.frameLabel}</span>
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-hidden p-6">
         {images.length === 0 ? (
@@ -694,6 +767,11 @@ export function ImagePreviewPane({
           >
             <UploadCloud className="mb-3 h-10 w-10 text-gray-600" />
             <p className="text-sm text-gray-400">拖入图片或点击添加</p>
+            {onOpenSequenceFolder ? (
+              <p className="mt-2 max-w-sm px-2 text-center text-xs text-gray-600">
+                也可使用「序列文件夹」将同一目录下的多张图按文件名排序，作为连续序列预览与处理。
+              </p>
+            ) : null}
           </div>
         ) : previewImage ? (
           <div className="flex h-full min-h-0 flex-col gap-3">

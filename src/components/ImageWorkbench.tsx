@@ -94,6 +94,17 @@ export function ImageWorkbench({
   const imagesRef = useRef(images)
   imagesRef.current = images
 
+  const sortedPreviewPaths = useMemo(
+    () =>
+      [...images]
+        .map((i) => i.path)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })),
+    [images],
+  )
+
+  const [sequencePlaying, setSequencePlaying] = useState(false)
+  const [sequenceFps, setSequenceFps] = useState(12)
+
   useEffect(() => {
     const list = imagesRef.current
     setPreviewPath((prev) => {
@@ -113,6 +124,24 @@ export function ImageWorkbench({
       return next
     })
   }, [imagePathsKey])
+
+  useEffect(() => {
+    if (sortedPreviewPaths.length < 2) setSequencePlaying(false)
+  }, [sortedPreviewPaths.length])
+
+  useEffect(() => {
+    if (!sequencePlaying || sortedPreviewPaths.length < 2) return
+    const ms = Math.max(33, Math.round(1000 / sequenceFps))
+    const id = window.setInterval(() => {
+      setPreviewPath((prev) => {
+        const paths = sortedPreviewPaths
+        const idx = prev ? paths.indexOf(prev) : -1
+        const cur = idx >= 0 ? idx : 0
+        return paths[(cur + 1) % paths.length]
+      })
+    }, ms)
+    return () => window.clearInterval(id)
+  }, [sequencePlaying, sequenceFps, sortedPreviewPaths])
 
   const overwriteCompatibleWithFormat = useMemo(() => {
     if (checkedPaths.size === 0) return false
@@ -204,6 +233,24 @@ export function ImageWorkbench({
     },
     [mergeNewImages],
   )
+
+  const handleOpenSequenceFolder = useCallback(async () => {
+    try {
+      const dir = await window.picafluxAPI.openDirectory()
+      if (!dir) return
+      const paths = await window.picafluxAPI.listImageSequenceInDirectory(dir)
+      if (paths.length === 0) {
+        window.alert('该文件夹内没有找到支持的图片（jpg / png / webp / avif）。')
+        return
+      }
+      const entries = await buildImageEntries(paths)
+      mergeNewImages(entries)
+      setSequencePlaying(false)
+      setPreviewPath(paths[0])
+    } catch (e) {
+      console.error(e)
+    }
+  }, [mergeNewImages])
 
   const handleRemoveImage = (path: string) => {
     setImages((prev) => prev.filter((img) => img.path !== path))
@@ -344,15 +391,28 @@ export function ImageWorkbench({
 
   const handleNavigatePreview = useCallback(
     (delta: -1 | 1) => {
-      if (images.length === 0) return
-      const idx = previewPath ? images.findIndex((i) => i.path === previewPath) : -1
+      if (sortedPreviewPaths.length === 0) return
+      const idx = previewPath ? sortedPreviewPaths.indexOf(previewPath) : -1
       const cur = idx >= 0 ? idx : 0
-      const len = images.length
+      const len = sortedPreviewPaths.length
       const next = (cur + delta + len) % len
-      setPreviewPath(images[next].path)
+      setPreviewPath(sortedPreviewPaths[next])
     },
-    [images, previewPath],
+    [sortedPreviewPaths, previewPath],
   )
+
+  const sequenceControls = useMemo(() => {
+    if (sortedPreviewPaths.length < 2) return null
+    const i = previewPath ? sortedPreviewPaths.indexOf(previewPath) : -1
+    const cur = i >= 0 ? i + 1 : 1
+    return {
+      playing: sequencePlaying,
+      fps: sequenceFps,
+      frameLabel: `帧 ${cur} / ${sortedPreviewPaths.length}`,
+      onPlayingChange: setSequencePlaying,
+      onFpsChange: setSequenceFps,
+    }
+  }, [sortedPreviewPaths, previewPath, sequencePlaying, sequenceFps])
 
   const fixedWatermarkRegionForPreview = getWatermarkRegionPercents(options)
   const selectedCount = checkedPaths.size
@@ -411,6 +471,8 @@ export function ImageWorkbench({
         trimTransparent={options.trimTransparent}
         trimPaddingPx={options.trimPaddingPx}
         onNavigatePreview={handleNavigatePreview}
+        onOpenSequenceFolder={handleOpenSequenceFolder}
+        sequenceControls={sequenceControls}
       />
       <SettingsPanel
         options={options}
