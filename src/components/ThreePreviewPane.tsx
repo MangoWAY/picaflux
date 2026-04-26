@@ -11,6 +11,8 @@ import React, {
 import { Canvas, useThree } from '@react-three/fiber'
 import { Bounds, Html, OrbitControls, useGLTF, useProgress } from '@react-three/drei'
 import { DRACOLoader } from 'three-stdlib'
+import * as THREE from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { UploadCloud, Box } from 'lucide-react'
 import type { ModelStats } from '@/lib/modelStats'
 import { computeModelStats } from '@/lib/modelStats'
@@ -38,6 +40,41 @@ function LoadStatus() {
       </div>
     </Html>
   )
+}
+
+function OfflineEnvironmentMap() {
+  const { gl, scene } = useThree()
+  useLayoutEffect(() => {
+    const pmrem = new THREE.PMREMGenerator(gl)
+    const room = new RoomEnvironment()
+    const rt = pmrem.fromScene(room)
+    scene.environment = rt.texture
+    return () => {
+      if (scene.environment === rt.texture) scene.environment = null
+      rt.dispose()
+      room.dispose()
+      pmrem.dispose()
+    }
+  }, [gl, scene])
+  return null
+}
+
+function PreviewRendererSetup() {
+  const { gl } = useThree()
+  useLayoutEffect(() => {
+    const prevTM = gl.toneMapping
+    const prevExp = gl.toneMappingExposure
+    const prevOC = gl.outputColorSpace
+    gl.toneMapping = THREE.ACESFilmicToneMapping
+    gl.toneMappingExposure = 0.92
+    gl.outputColorSpace = THREE.SRGBColorSpace
+    return () => {
+      gl.toneMapping = prevTM
+      gl.toneMappingExposure = prevExp
+      gl.outputColorSpace = prevOC
+    }
+  }, [gl])
+  return null
 }
 
 function CaptureBridge({
@@ -114,9 +151,11 @@ function ViewportScene({
   return (
     <>
       <color attach="background" args={['#1a1a1a']} />
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[8, 12, 10]} intensity={1.1} />
-      <directionalLight position={[-6, 4, -4]} intensity={0.35} />
+      <PreviewRendererSetup />
+      <OfflineEnvironmentMap />
+      <ambientLight intensity={0.32} />
+      <directionalLight position={[8, 12, 10]} intensity={0.65} />
+      <directionalLight position={[-6, 4, -4]} intensity={0.22} />
       <Suspense fallback={<LoadStatus />}>
         <GltfErrorBoundary key={url}>
           <Bounds fit clip observe margin={1.2}>
