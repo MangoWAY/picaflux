@@ -9,11 +9,20 @@ import React, {
   useCallback,
 } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
-import { Bounds, Html, OrbitControls, useGLTF, useProgress } from '@react-three/drei'
-import { DRACOLoader } from 'three-stdlib'
+import {
+  Bounds,
+  Grid,
+  Html,
+  OrbitControls,
+  TransformControls,
+  useGLTF,
+  useProgress,
+} from '@react-three/drei'
+import { DRACOLoader, OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
-import { UploadCloud, Box } from 'lucide-react'
+import { UploadCloud, Box, Grid3x3, RotateCcw } from 'lucide-react'
+import { PanelToggle } from './PanelToggle'
 import type { ModelStats } from '@/lib/modelStats'
 import { computeModelStats } from '@/lib/modelStats'
 import { pathToFileUrl } from '@/lib/fileUrl'
@@ -95,7 +104,9 @@ function CaptureBridge({
   return null
 }
 
-function LoadedModel({ url, onStats }: { url: string; onStats: (s: ModelStats) => void }) {
+type Vec3 = [number, number, number]
+
+function LoadedModelPrimitive({ url, onStats }: { url: string; onStats: (s: ModelStats) => void }) {
   const gltf = useGLTF(url, true, true, (loader) => {
     const dracoLoader = new DRACOLoader()
     dracoLoader.setDecoderPath(getDracoDecoderPath())
@@ -143,11 +154,24 @@ function ViewportScene({
   url,
   onStats,
   captureRef,
+  showGrid,
+  modelPosition,
+  onModelPositionChange,
+  viewportModelSelected,
+  onViewportModelSelectedChange,
 }: {
   url: string
   onStats: (s: ModelStats) => void
   captureRef: React.MutableRefObject<(() => string | null) | null>
+  showGrid: boolean
+  modelPosition: Vec3
+  onModelPositionChange: (p: Vec3) => void
+  viewportModelSelected: boolean
+  onViewportModelSelectedChange: (v: boolean) => void
 }) {
+  const orbitRef = useRef<OrbitControlsImpl | null>(null)
+  const [transformHost, setTransformHost] = useState<THREE.Group | null>(null)
+
   return (
     <>
       <color attach="background" args={['#1a1a1a']} />
@@ -156,14 +180,54 @@ function ViewportScene({
       <ambientLight intensity={0.32} />
       <directionalLight position={[8, 12, 10]} intensity={0.65} />
       <directionalLight position={[-6, 4, -4]} intensity={0.22} />
+      {showGrid ? (
+        <Grid
+          args={[48, 48]}
+          position={[0, 0, 0]}
+          infiniteGrid
+          cellSize={0.45}
+          sectionSize={3.15}
+          fadeDistance={36}
+          fadeStrength={1}
+          sectionColor="#4d4d4d"
+          cellColor="#353535"
+        />
+      ) : null}
       <Suspense fallback={<LoadStatus />}>
         <GltfErrorBoundary key={url}>
-          <Bounds fit clip observe margin={1.2}>
-            <LoadedModel url={url} onStats={onStats} />
+          <Bounds fit clip margin={1.2} observe={false}>
+            <group
+              ref={(node) => {
+                setTransformHost((prev) => (prev === node ? prev : node))
+              }}
+              position={modelPosition}
+              onClick={(e) => {
+                e.stopPropagation()
+                onViewportModelSelectedChange(true)
+              }}
+            >
+              <LoadedModelPrimitive url={url} onStats={onStats} />
+            </group>
           </Bounds>
         </GltfErrorBoundary>
       </Suspense>
-      <OrbitControls makeDefault enableDamping dampingFactor={0.08} />
+      <OrbitControls ref={orbitRef} makeDefault enableDamping dampingFactor={0.08} />
+      {viewportModelSelected && transformHost ? (
+        <TransformControls
+          object={transformHost}
+          mode="translate"
+          onMouseDown={() => {
+            if (orbitRef.current) orbitRef.current.enabled = false
+          }}
+          onMouseUp={() => {
+            if (orbitRef.current) orbitRef.current.enabled = true
+          }}
+          onObjectChange={() => {
+            const o = transformHost
+            onModelPositionChange([o.position.x, o.position.y, o.position.z])
+          }}
+        />
+      ) : null}
       <CaptureBridge captureRef={captureRef} />
     </>
   )
@@ -177,6 +241,9 @@ interface ThreePreviewPaneProps {
   models: Model3dFile[]
   previewModel: Model3dFile | null
   previewUrl: string | null
+  /** 当前预览模型在场景中的平移（仅预览，不写回文件） */
+  previewModelPosition: Vec3
+  onPreviewModelPositionChange: (p: Vec3) => void
   viewportStats: ModelStats | null
   selectedCount: number
   onAddModels: () => void
@@ -190,6 +257,8 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
       models,
       previewModel,
       previewUrl,
+      previewModelPosition,
+      onPreviewModelPositionChange,
       viewportStats,
       selectedCount,
       onAddModels,
@@ -199,6 +268,8 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
     ref,
   ) {
     const [dragOver, setDragOver] = useState(false)
+    const [showGroundGrid, setShowGroundGrid] = useState(true)
+    const [viewportModelSelected, setViewportModelSelected] = useState(false)
     const captureFnRef = useRef<(() => string | null) | null>(null)
 
     useImperativeHandle(ref, () => ({
@@ -215,6 +286,12 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
     useEffect(() => {
       if (!previewUrl) onStatsUpdate(null)
     }, [previewUrl, onStatsUpdate])
+
+    const fileUrl = previewUrl ? pathToFileUrl(previewUrl) : null
+
+    useEffect(() => {
+      setViewportModelSelected(false)
+    }, [fileUrl])
 
     const collectPathsFromDataTransfer = useCallback((dt: DataTransfer): string[] => {
       const paths: string[] = []
@@ -250,8 +327,6 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
       if (paths.length) onDropPaths(paths)
     }
 
-    const fileUrl = previewUrl ? pathToFileUrl(previewUrl) : null
-
     return (
       <div
         className="relative flex min-h-0 min-w-0 flex-1 flex-col border-r border-[#2d2d2d] bg-[#141414]"
@@ -259,15 +334,45 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#2d2d2d] px-4">
-          <div className="min-w-0">
+        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-[#2d2d2d] px-3 sm:px-4">
+          <div className="min-w-0 flex-1">
             <h2 className="truncate text-sm font-semibold text-white">3D 预览</h2>
             <p className="truncate text-xs text-gray-500">
               {models.length === 0
                 ? '拖入 .glb / .gltf 或点击添加'
-                : `${selectedCount} 项已选 · 共 ${models.length} 个文件`}
+                : fileUrl
+                  ? `${selectedCount} 项已选 · 共 ${models.length} · 点击模型可平移`
+                  : `${selectedCount} 项已选 · 共 ${models.length} 个文件`}
             </p>
           </div>
+          {fileUrl ? (
+            <>
+              <div
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#2d2d2d] bg-[#181818] px-2 py-1.5"
+                title="地面参考网格"
+              >
+                <Grid3x3 className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden />
+                <span className="hidden text-[11px] text-gray-500 sm:inline">地面</span>
+                <PanelToggle
+                  checked={showGroundGrid}
+                  onChange={setShowGroundGrid}
+                  ariaLabel={showGroundGrid ? '隐藏地面网格' : '显示地面网格'}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onPreviewModelPositionChange([0, 0, 0])
+                  setViewportModelSelected(false)
+                }}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#2d2d2d] bg-[#181818] px-2 py-1.5 text-[11px] text-gray-300 transition-colors hover:border-blue-500/40 hover:text-white"
+                title="复位模型位置"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">复位</span>
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
             onClick={onAddModels}
@@ -292,12 +397,18 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
                 className="h-full w-full"
                 camera={{ position: [2.2, 1.6, 2.2], fov: 45, near: 0.01, far: 500 }}
                 gl={{ preserveDrawingBuffer: true, alpha: false, antialias: true }}
+                onPointerMissed={() => setViewportModelSelected(false)}
               >
                 <ViewportScene
                   key={fileUrl}
                   url={fileUrl}
                   onStats={handleStats}
                   captureRef={captureFnRef}
+                  showGrid={showGroundGrid}
+                  modelPosition={previewModelPosition}
+                  onModelPositionChange={onPreviewModelPositionChange}
+                  viewportModelSelected={viewportModelSelected}
+                  onViewportModelSelectedChange={setViewportModelSelected}
                 />
               </Canvas>
             </div>

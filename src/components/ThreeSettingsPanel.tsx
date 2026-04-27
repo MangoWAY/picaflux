@@ -1,14 +1,11 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import clsx from 'clsx'
-import { FolderOpen, ImageIcon, RefreshCw, Images } from 'lucide-react'
-
-export type Convert3dPresetUi = 'optimize' | 'reserialize'
+import { FolderOpen, ImageIcon, Layers2, RefreshCw, Images } from 'lucide-react'
+import { PanelToggle } from './PanelToggle'
 
 interface ThreeSettingsPanelProps {
   outputDir: string
   onSelectOutputDir: () => void
-  convertPreset: Convert3dPresetUi
-  onConvertPresetChange: (p: Convert3dPresetUi) => void
   onExportThumbnail: () => void
   onExportThumbnailsSelected: () => void
   onConvertSelected: () => void
@@ -17,19 +14,17 @@ interface ThreeSettingsPanelProps {
   selectedForProcessCount: number
   totalModelCount: number
   statusMessage: string | null
+  textureCompressEnabled: boolean
+  onTextureCompressEnabledChange: (enabled: boolean) => void
   textureMaxSize: number
-  textureFormat: 'keep' | 'webp' | 'jpeg'
   textureQuality: number
   onTextureMaxSizeChange: (n: number) => void
-  onTextureFormatChange: (f: 'keep' | 'webp' | 'jpeg') => void
   onTextureQualityChange: (q: number) => void
 }
 
 export function ThreeSettingsPanel({
   outputDir,
   onSelectOutputDir,
-  convertPreset,
-  onConvertPresetChange,
   onExportThumbnail,
   onExportThumbnailsSelected,
   onConvertSelected,
@@ -38,15 +33,21 @@ export function ThreeSettingsPanel({
   selectedForProcessCount,
   totalModelCount,
   statusMessage,
+  textureCompressEnabled,
+  onTextureCompressEnabledChange,
   textureMaxSize,
-  textureFormat,
   textureQuality,
   onTextureMaxSizeChange,
-  onTextureFormatChange,
   onTextureQualityChange,
 }: ThreeSettingsPanelProps) {
   const canConvert = selectedForProcessCount > 0 && Boolean(outputDir.trim())
   const canBatchThumb = selectedForProcessCount > 0 && Boolean(outputDir.trim())
+
+  const textureSummary = useMemo(() => {
+    if (!textureCompressEnabled) return null
+    if (textureMaxSize === 0) return '不改写贴图'
+    return `最长边 ≤${textureMaxSize}px，原格式`
+  }, [textureCompressEnabled, textureMaxSize])
 
   return (
     <div className="flex h-full w-[320px] shrink-0 flex-col border-l border-[#2d2d2d] bg-[#1a1a1a]">
@@ -56,70 +57,74 @@ export function ThreeSettingsPanel({
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-        <div>
-          <label className="mb-2 block text-xs font-medium text-gray-400">GLB 转换预设</label>
-          <select
-            value={convertPreset}
-            onChange={(e) => onConvertPresetChange(e.target.value as Convert3dPresetUi)}
-            disabled={isProcessing}
-            className="w-full rounded-lg border border-[#2d2d2d] bg-[#121212] px-3 py-2 text-sm text-white"
-          >
-            <option value="optimize">优化（prune + dedup，输出 *_optimized.glb）</option>
-            <option value="reserialize">仅重打包（*_out.glb）</option>
-          </select>
-        </div>
-
-        <div className="space-y-2 rounded-lg border border-[#2d2d2d] bg-[#121212] p-3">
-          <div className="text-xs font-medium text-gray-400">贴图压缩（可选）</div>
-          <div className="space-y-2">
-            <label className="block text-[11px] text-gray-500">最长边上限</label>
-            <select
-              value={String(textureMaxSize)}
-              onChange={(e) => onTextureMaxSizeChange(parseInt(e.target.value, 10) || 0)}
-              disabled={isProcessing}
-              className="w-full rounded-lg border border-[#2d2d2d] bg-[#0f0f0f] px-3 py-2 text-sm text-white"
-            >
-              <option value="0">不处理</option>
-              <option value="512">512px</option>
-              <option value="1024">1024px</option>
-              <option value="2048">2048px</option>
-              <option value="4096">4096px</option>
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label className="block text-[11px] text-gray-500">输出格式</label>
-            <select
-              value={textureFormat}
-              onChange={(e) => onTextureFormatChange(e.target.value as 'keep' | 'webp' | 'jpeg')}
-              disabled={isProcessing}
-              className="w-full rounded-lg border border-[#2d2d2d] bg-[#0f0f0f] px-3 py-2 text-sm text-white"
-            >
-              <option value="keep">保持原格式</option>
-              <option value="webp">WebP</option>
-              <option value="jpeg">JPEG（有透明会自动改 WebP）</option>
-            </select>
-          </div>
-          {textureFormat === 'keep' ? null : (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[11px] text-gray-500">
-                <span>质量</span>
-                <span>{textureQuality}</span>
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={100}
-                value={textureQuality}
-                onChange={(e) => onTextureQualityChange(parseInt(e.target.value, 10) || 80)}
-                disabled={isProcessing}
-                className="w-full accent-blue-500"
-              />
-            </div>
+        <div
+          className={clsx(
+            'overflow-hidden rounded-lg border border-[#2d2d2d] bg-[#141414]',
+            textureCompressEnabled && 'border-blue-500/35 ring-1 ring-blue-500/20',
           )}
-          <p className="text-[10px] leading-relaxed text-gray-500">
-            会在写出 GLB 前，对纹理按最长边缩放并重编码（使用
-            sharp）。如选择“保持原格式”，仅在原纹理为 PNG/JPEG/WebP 时才会在缩放后重编码。
-          </p>
+        >
+          <div className="flex items-center justify-between gap-2 px-2.5 py-2">
+            <div className="flex min-w-0 flex-1 items-start gap-2">
+              <Layers2 className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-gray-200">贴图压缩</span>
+                {textureSummary ? (
+                  <span
+                    className="mt-0.5 block truncate text-[11px] text-gray-500"
+                    title={textureSummary}
+                  >
+                    {textureSummary}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <PanelToggle
+              checked={textureCompressEnabled}
+              onChange={(v) => {
+                if (isProcessing) return
+                onTextureCompressEnabledChange(v)
+              }}
+              ariaLabel={textureCompressEnabled ? '关闭贴图压缩' : '启用贴图压缩'}
+            />
+          </div>
+          {textureCompressEnabled ? (
+            <div className="space-y-2 border-t border-[#2d2d2d] bg-[#121212]/80 px-2.5 pb-2.5 pt-2">
+              <div className="space-y-2">
+                <label className="block text-[11px] text-gray-500">最长边上限</label>
+                <select
+                  value={String(textureMaxSize)}
+                  onChange={(e) => onTextureMaxSizeChange(parseInt(e.target.value, 10) || 0)}
+                  disabled={isProcessing}
+                  className="w-full rounded-lg border border-[#2d2d2d] bg-[#0f0f0f] px-3 py-2 text-sm text-white"
+                >
+                  <option value="0">不处理</option>
+                  <option value="256">256px</option>
+                  <option value="512">512px</option>
+                  <option value="1024">1024px</option>
+                  <option value="2048">2048px</option>
+                  <option value="4096">4096px</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] text-gray-500">
+                  <span>质量</span>
+                  <span>{textureQuality}</span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={100}
+                  value={textureQuality}
+                  onChange={(e) => onTextureQualityChange(parseInt(e.target.value, 10) || 100)}
+                  disabled={isProcessing}
+                  className="w-full accent-blue-500"
+                />
+              </div>
+              <p className="text-[10px] leading-relaxed text-gray-500">
+                最长边缩放，PNG/JPEG/WebP 保持格式；质量仅影响 JPEG 与 WebP。
+              </p>
+            </div>
+          ) : null}
         </div>
 
         <div>

@@ -19,7 +19,7 @@ export interface SanitizedProcess3dOptions {
 
 export function sanitizeProcess3dOptions(raw: unknown): SanitizedProcess3dOptions {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { preset: 'optimize', textureMaxSize: 0, textureFormat: 'keep', textureQuality: 80 }
+    return { preset: 'optimize', textureMaxSize: 0, textureFormat: 'keep', textureQuality: 100 }
   }
   const d = raw as Process3dOptions
   const preset: Convert3dPreset = d.preset === 'reserialize' ? 'reserialize' : 'optimize'
@@ -31,8 +31,8 @@ export function sanitizeProcess3dOptions(raw: unknown): SanitizedProcess3dOption
   const textureFormat: SanitizedProcess3dOptions['textureFormat'] =
     d.textureFormat === 'webp' || d.textureFormat === 'jpeg' ? d.textureFormat : 'keep'
   const textureQuality = (() => {
-    const n = typeof d.textureQuality === 'number' ? d.textureQuality : 80
-    if (!Number.isFinite(n)) return 80
+    const n = typeof d.textureQuality === 'number' ? d.textureQuality : 100
+    if (!Number.isFinite(n)) return 100
     return Math.min(100, Math.max(1, Math.round(n)))
   })()
   return { preset, textureMaxSize, textureFormat, textureQuality }

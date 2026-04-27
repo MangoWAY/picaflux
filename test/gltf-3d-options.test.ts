@@ -6,6 +6,7 @@ describe('sanitizeProcess3dOptions', () => {
     expect(sanitizeProcess3dOptions(null).preset).toBe('optimize')
     expect(sanitizeProcess3dOptions({}).preset).toBe('optimize')
     expect(sanitizeProcess3dOptions(null).textureFormat).toBe('keep')
+    expect(sanitizeProcess3dOptions(null).textureQuality).toBe(100)
   })
 
   it('accepts reserialize', () => {

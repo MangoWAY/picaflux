@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { ThreeStrip, type Model3dFile, type ThreeStripListMode } from './ThreeStrip'
 import { ThreePreviewPane, type ThreePreviewPaneHandle } from './ThreePreviewPane'
-import { ThreeSettingsPanel, type Convert3dPresetUi } from './ThreeSettingsPanel'
+import { ThreeSettingsPanel } from './ThreeSettingsPanel'
 import type { ModelStats } from '@/lib/modelStats'
 
 const MODEL_EXT = /\.(glb|gltf)$/i
@@ -34,10 +34,12 @@ export function ThreeWorkbench() {
   const [previewPath, setPreviewPath] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [outputDir, setOutputDir] = useState('')
-  const [convertPreset, setConvertPreset] = useState<Convert3dPresetUi>('optimize')
+  const [previewModelPositionByPath, setPreviewModelPositionByPath] = useState<
+    Record<string, [number, number, number]>
+  >({})
+  const [textureCompressEnabled, setTextureCompressEnabled] = useState(false)
   const [textureMaxSize, setTextureMaxSize] = useState(2048)
-  const [textureFormat, setTextureFormat] = useState<'keep' | 'webp' | 'jpeg'>('webp')
-  const [textureQuality, setTextureQuality] = useState(80)
+  const [textureQuality, setTextureQuality] = useState(100)
   const [viewportStats, setViewportStats] = useState<ModelStats | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
@@ -142,6 +144,18 @@ export function ThreeWorkbench() {
   const previewModel = previewPath ? (models.find((m) => m.path === previewPath) ?? null) : null
   const selectedCount = checkedPaths.size
 
+  const previewModelPosition: [number, number, number] = previewPath
+    ? (previewModelPositionByPath[previewPath] ?? [0, 0, 0])
+    : [0, 0, 0]
+
+  const handlePreviewModelPositionChange = useCallback(
+    (pos: [number, number, number]) => {
+      if (!previewPath) return
+      setPreviewModelPositionByPath((prev) => ({ ...prev, [previewPath]: pos }))
+    },
+    [previewPath],
+  )
+
   const handleExportThumbnail = async () => {
     if (!previewPath || !outputDir.trim()) {
       setStatusMessage('请选择输出目录，并确保有当前预览模型。')
@@ -222,12 +236,19 @@ export function ThreeWorkbench() {
       prev.map((m) => (checkedPaths.has(m.path) ? { ...m, status: 'processing' as const } : m)),
     )
 
-    const opts = {
-      preset: convertPreset,
-      textureMaxSize,
-      textureFormat,
-      textureQuality,
-    }
+    const opts = textureCompressEnabled
+      ? {
+          preset: 'optimize' as const,
+          textureMaxSize,
+          textureFormat: 'keep' as const,
+          textureQuality,
+        }
+      : {
+          preset: 'optimize' as const,
+          textureMaxSize: 0,
+          textureFormat: 'keep' as const,
+          textureQuality: 100,
+        }
     let lastError: string | null = null
     for (const m of batch) {
       try {
@@ -273,6 +294,8 @@ export function ThreeWorkbench() {
         models={models}
         previewModel={previewModel}
         previewUrl={previewPath}
+        previewModelPosition={previewModelPosition}
+        onPreviewModelPositionChange={handlePreviewModelPositionChange}
         viewportStats={viewportStats}
         selectedCount={selectedCount}
         onAddModels={handleAddModels}
@@ -282,8 +305,6 @@ export function ThreeWorkbench() {
       <ThreeSettingsPanel
         outputDir={outputDir}
         onSelectOutputDir={handleSelectOutputDir}
-        convertPreset={convertPreset}
-        onConvertPresetChange={setConvertPreset}
         onExportThumbnail={handleExportThumbnail}
         onExportThumbnailsSelected={handleExportThumbnailsSelected}
         onConvertSelected={handleConvertSelected}
@@ -292,11 +313,11 @@ export function ThreeWorkbench() {
         selectedForProcessCount={selectedCount}
         totalModelCount={models.length}
         statusMessage={statusMessage}
+        textureCompressEnabled={textureCompressEnabled}
+        onTextureCompressEnabledChange={setTextureCompressEnabled}
         textureMaxSize={textureMaxSize}
-        textureFormat={textureFormat}
         textureQuality={textureQuality}
         onTextureMaxSizeChange={setTextureMaxSize}
-        onTextureFormatChange={setTextureFormat}
         onTextureQualityChange={setTextureQuality}
       />
     </>
