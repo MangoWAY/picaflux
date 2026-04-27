@@ -5,6 +5,7 @@ export interface ModelStats {
   meshes: number
   skinnedMeshes: number
   triangles: number
+  vertices: number
   materialCount: number
   textureCount: number
   animations: number
@@ -31,6 +32,7 @@ export function computeModelStats(
   let meshes = 0
   let skinnedMeshes = 0
   let triangles = 0
+  let vertices = 0
   const materials = new Set<unknown>()
   const textures = new Set<Texture>()
 
@@ -39,6 +41,7 @@ export function computeModelStats(
       skinnedMeshes += 1
       meshes += 1
       triangles += triangleCountForGeometry(obj)
+      vertices += obj.geometry.getAttribute('position')?.count ?? 0
       if (Array.isArray(obj.material)) {
         for (const m of obj.material) materials.add(m)
       } else if (obj.material) {
@@ -47,6 +50,7 @@ export function computeModelStats(
     } else if (obj instanceof Mesh) {
       meshes += 1
       triangles += triangleCountForGeometry(obj)
+      vertices += obj.geometry.getAttribute('position')?.count ?? 0
       if (Array.isArray(obj.material)) {
         for (const m of obj.material) materials.add(m)
       } else if (obj.material) {
@@ -75,6 +79,7 @@ export function computeModelStats(
     meshes,
     skinnedMeshes,
     triangles,
+    vertices,
     materialCount: materials.size,
     textureCount: textures.size,
     animations: animCount,

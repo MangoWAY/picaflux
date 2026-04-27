@@ -21,7 +21,7 @@ import {
 import { DRACOLoader, OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
-import { UploadCloud, Box, Grid3x3, RotateCcw } from 'lucide-react'
+import { UploadCloud, Box, Grid3x3, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react'
 import { PanelToggle } from './PanelToggle'
 import type { ModelStats } from '@/lib/modelStats'
 import { computeModelStats } from '@/lib/modelStats'
@@ -105,8 +105,94 @@ function CaptureBridge({
 }
 
 type Vec3 = [number, number, number]
+type RenderStyle = 'standard' | 'wireframe' | 'clay' | 'normal'
 
-function LoadedModelPrimitive({ url, onStats }: { url: string; onStats: (s: ModelStats) => void }) {
+interface TexturePreviewInfo {
+  key: string
+  label: string
+  width: number
+  height: number
+  previewUrl: string | null
+}
+
+function getTextureDimensions(texture: THREE.Texture): { width: number; height: number } | null {
+  const image = texture.image as
+    | { width?: number; height?: number }
+    | { data?: { width?: number; height?: number } }
+    | null
+    | undefined
+  const width = Number(
+    (image && 'width' in image ? image.width : undefined) ??
+      (image && 'data' in image ? image.data?.width : undefined) ??
+      0,
+  )
+  const height = Number(
+    (image && 'height' in image ? image.height : undefined) ??
+      (image && 'data' in image ? image.data?.height : undefined) ??
+      0,
+  )
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
+  return { width: Math.round(width), height: Math.round(height) }
+}
+
+function textureToPreviewUrl(texture: THREE.Texture): string | null {
+  const image = texture.image as
+    | (CanvasImageSource & { width?: number; height?: number })
+    | { data?: Uint8Array; width?: number; height?: number }
+    | null
+    | undefined
+  if (!image) return null
+  try {
+    const canvas = document.createElement('canvas')
+    const dim = getTextureDimensions(texture)
+    if (!dim) return null
+    canvas.width = Math.max(1, Math.min(256, dim.width))
+    canvas.height = Math.max(1, Math.min(256, dim.height))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    if ('data' in image && image.data instanceof Uint8Array) return null
+    ctx.drawImage(image as CanvasImageSource, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/png')
+  } catch {
+    return null
+  }
+}
+
+function collectTextureInfos(root: THREE.Object3D): TexturePreviewInfo[] {
+  const textures = new Map<string, TexturePreviewInfo>()
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh || obj instanceof THREE.SkinnedMesh)) return
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+    for (const mat of mats) {
+      if (!mat || typeof mat !== 'object') continue
+      const entries = Object.entries(mat as Record<string, unknown>)
+      for (const [slot, value] of entries) {
+        if (!(value instanceof THREE.Texture)) continue
+        const dim = getTextureDimensions(value)
+        if (!dim) continue
+        if (textures.has(value.uuid)) continue
+        textures.set(value.uuid, {
+          key: value.uuid,
+          label: slot,
+          width: dim.width,
+          height: dim.height,
+          previewUrl: textureToPreviewUrl(value),
+        })
+      }
+    }
+  })
+  return Array.from(textures.values())
+}
+
+function LoadedModelPrimitive({
+  url,
+  onStats,
+  onTextures,
+}: {
+  url: string
+  onStats: (s: ModelStats) => void
+  onTextures: (items: TexturePreviewInfo[]) => void
+}) {
   const gltf = useGLTF(url, true, true, (loader) => {
     const dracoLoader = new DRACOLoader()
     dracoLoader.setDecoderPath(getDracoDecoderPath())
@@ -115,7 +201,8 @@ function LoadedModelPrimitive({ url, onStats }: { url: string; onStats: (s: Mode
 
   useLayoutEffect(() => {
     onStats(computeModelStats(gltf.scene, gltf.animations))
-  }, [gltf, url, onStats])
+    onTextures(collectTextureInfos(gltf.scene))
+  }, [gltf, url, onStats, onTextures])
 
   useEffect(() => {
     return () => {
@@ -150,11 +237,68 @@ class GltfErrorBoundary extends React.Component<
   }
 }
 
+function materialFromMode(mode: RenderStyle, template: THREE.Material): THREE.Material | null {
+  if (mode === 'standard') return null
+  const common = { side: template.side }
+  if (mode === 'wireframe') {
+    return new THREE.MeshStandardMaterial({
+      color: '#d0d0d0',
+      wireframe: true,
+      metalness: 0,
+      roughness: 0.95,
+      ...common,
+    })
+  }
+  if (mode === 'clay') {
+    return new THREE.MeshStandardMaterial({
+      color: '#d9d9d9',
+      metalness: 0,
+      roughness: 1,
+      ...common,
+    })
+  }
+  return new THREE.MeshNormalMaterial(common)
+}
+
+function ModelMaterialMode({ target, mode }: { target: THREE.Object3D | null; mode: RenderStyle }) {
+  useEffect(() => {
+    if (!target) return
+    const originals = new Map<THREE.Mesh | THREE.SkinnedMesh, THREE.Material | THREE.Material[]>()
+    const created: THREE.Material[] = []
+    target.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh || obj instanceof THREE.SkinnedMesh)) return
+      const source = obj.material
+      originals.set(obj, source)
+      if (mode === 'standard') return
+      if (Array.isArray(source)) {
+        obj.material = source.map((m) => {
+          const next = materialFromMode(mode, m) ?? m
+          if (next !== m) created.push(next)
+          return next
+        })
+      } else if (source) {
+        const next = materialFromMode(mode, source) ?? source
+        if (next !== source) created.push(next)
+        obj.material = next
+      }
+    })
+    return () => {
+      for (const [mesh, material] of originals) {
+        mesh.material = material
+      }
+      for (const m of created) m.dispose()
+    }
+  }, [target, mode])
+  return null
+}
+
 function ViewportScene({
   url,
   onStats,
+  onTextures,
   captureRef,
   showGrid,
+  renderStyle,
   modelPosition,
   onModelPositionChange,
   viewportModelSelected,
@@ -162,8 +306,10 @@ function ViewportScene({
 }: {
   url: string
   onStats: (s: ModelStats) => void
+  onTextures: (items: TexturePreviewInfo[]) => void
   captureRef: React.MutableRefObject<(() => string | null) | null>
   showGrid: boolean
+  renderStyle: RenderStyle
   modelPosition: Vec3
   onModelPositionChange: (p: Vec3) => void
   viewportModelSelected: boolean
@@ -206,9 +352,10 @@ function ViewportScene({
                 onViewportModelSelectedChange(true)
               }}
             >
-              <LoadedModelPrimitive url={url} onStats={onStats} />
+              <LoadedModelPrimitive url={url} onStats={onStats} onTextures={onTextures} />
             </group>
           </Bounds>
+          <ModelMaterialMode target={transformHost} mode={renderStyle} />
         </GltfErrorBoundary>
       </Suspense>
       <OrbitControls ref={orbitRef} makeDefault enableDamping dampingFactor={0.08} />
@@ -270,6 +417,9 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
     const [dragOver, setDragOver] = useState(false)
     const [showGroundGrid, setShowGroundGrid] = useState(true)
     const [viewportModelSelected, setViewportModelSelected] = useState(false)
+    const [renderStyle, setRenderStyle] = useState<RenderStyle>('standard')
+    const [infoCollapsed, setInfoCollapsed] = useState(false)
+    const [textureInfos, setTextureInfos] = useState<TexturePreviewInfo[]>([])
     const captureFnRef = useRef<(() => string | null) | null>(null)
 
     useImperativeHandle(ref, () => ({
@@ -291,6 +441,7 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
 
     useEffect(() => {
       setViewportModelSelected(false)
+      setTextureInfos([])
     }, [fileUrl])
 
     const collectPathsFromDataTransfer = useCallback((dt: DataTransfer): string[] => {
@@ -348,6 +499,32 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
           {fileUrl ? (
             <>
               <div
+                className="flex shrink-0 items-center rounded-lg border border-[#2d2d2d] bg-[#181818] p-0.5"
+                title="渲染模式"
+              >
+                {(
+                  [
+                    ['standard', '标准'],
+                    ['wireframe', '网格'],
+                    ['clay', '白模'],
+                    ['normal', '法线'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setRenderStyle(id)}
+                    className={
+                      renderStyle === id
+                        ? 'rounded px-2 py-1 text-[11px] text-white bg-[#2d2d2d]'
+                        : 'rounded px-2 py-1 text-[11px] text-gray-500 hover:text-gray-300'
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div
                 className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#2d2d2d] bg-[#181818] px-2 py-1.5"
                 title="地面参考网格"
               >
@@ -403,8 +580,10 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
                   key={fileUrl}
                   url={fileUrl}
                   onStats={handleStats}
+                  onTextures={setTextureInfos}
                   captureRef={captureFnRef}
                   showGrid={showGroundGrid}
+                  renderStyle={renderStyle}
                   modelPosition={previewModelPosition}
                   onModelPositionChange={onPreviewModelPositionChange}
                   viewportModelSelected={viewportModelSelected}
@@ -415,44 +594,95 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
           )}
 
           {previewModel ? (
-            <div className="shrink-0 border-t border-[#2d2d2d] px-4 py-3 text-xs text-gray-400">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div>
-                  <span className="text-gray-600">大小</span>
-                  <p className="text-gray-300">{formatSize(previewModel.size)}</p>
+            <div className="shrink-0 border-t border-[#2d2d2d] bg-[#151515]">
+              <button
+                type="button"
+                onClick={() => setInfoCollapsed((v) => !v)}
+                className="flex w-full items-center justify-between px-4 py-2 text-left text-xs text-gray-400 transition-colors hover:bg-[#1b1b1b]"
+              >
+                <span>模型信息</span>
+                {infoCollapsed ? (
+                  <ChevronUp className="h-4 w-4 text-gray-500" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-gray-500" />
+                )}
+              </button>
+              {infoCollapsed ? null : (
+                <div className="space-y-2 px-4 pb-3 text-xs text-gray-400">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1.5">
+                      <span className="text-[10px] text-gray-600">文件大小</span>
+                      <p className="mt-0.5 text-gray-200">{formatSize(previewModel.size)}</p>
+                    </div>
+                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1.5">
+                      <span className="text-[10px] text-gray-600">网格 / 材质</span>
+                      <p className="mt-0.5 text-gray-200">
+                        {viewportStats?.meshes ?? previewModel.meshCount ?? 0} /{' '}
+                        {viewportStats?.materialCount ?? previewModel.materialCount ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1.5">
+                      <span className="text-[10px] text-gray-600">贴图 / 动画</span>
+                      <p className="mt-0.5 text-gray-200">
+                        {viewportStats?.textureCount ?? previewModel.textureCount ?? 0} /{' '}
+                        {viewportStats?.animations ?? previewModel.animationCount ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1.5">
+                      <span className="text-[10px] text-gray-600">顶点 / 三角面</span>
+                      <p className="mt-0.5 text-gray-200">
+                        {viewportStats?.vertices?.toLocaleString() ?? '—'} /{' '}
+                        {viewportStats?.triangles?.toLocaleString() ?? '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1.5">
+                    <span className="text-[10px] text-gray-600">文件名</span>
+                    <p className="mt-0.5 truncate text-gray-200" title={previewModel.path}>
+                      {previewModel.name}
+                    </p>
+                  </div>
+
+                  <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-2">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-[10px] text-gray-600">纹理预览</span>
+                      <span className="text-[10px] text-gray-500">{textureInfos.length} 张</span>
+                    </div>
+                    {textureInfos.length === 0 ? (
+                      <p className="text-[11px] text-gray-500">未检测到可预览纹理</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {textureInfos.map((tex) => (
+                          <div
+                            key={tex.key}
+                            className="overflow-hidden rounded border border-[#2d2d2d] bg-[#0f0f0f]"
+                            title={`${tex.label} · ${tex.width}x${tex.height}`}
+                          >
+                            <div className="flex aspect-square items-center justify-center bg-[#0b0b0b]">
+                              {tex.previewUrl ? (
+                                <img
+                                  src={tex.previewUrl}
+                                  alt=""
+                                  className="h-full w-full object-contain"
+                                />
+                              ) : (
+                                <Box className="h-6 w-6 text-gray-600" />
+                              )}
+                            </div>
+                            <div className="px-1.5 py-1">
+                              <p className="truncate text-[10px] text-gray-400">{tex.label}</p>
+                              <p className="text-[10px] text-gray-500">
+                                {tex.width} x {tex.height}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <span className="text-gray-600">主进程解析</span>
-                  <p className="text-gray-300">
-                    M {previewModel.meshCount ?? '—'} / Mat {previewModel.materialCount ?? '—'}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-gray-600">贴图 / 动画</span>
-                  <p className="text-gray-300">
-                    T {previewModel.textureCount ?? '—'} / A {previewModel.animationCount ?? '—'}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-gray-600">文件</span>
-                  <p className="truncate text-gray-300" title={previewModel.path}>
-                    {previewModel.name}
-                  </p>
-                </div>
-              </div>
-              {viewportStats ? (
-                <div className="mt-2 border-t border-[#2d2d2d] pt-2 text-[11px] text-gray-500">
-                  <span className="text-gray-600">渲染统计</span>
-                  <p className="mt-0.5 text-gray-300">
-                    三角面 {viewportStats.triangles.toLocaleString()} · Mesh {viewportStats.meshes}
-                    {viewportStats.skinnedMeshes > 0
-                      ? `（蒙皮 ${viewportStats.skinnedMeshes}）`
-                      : ''}
-                    · 材质 {viewportStats.materialCount} · 贴图 {viewportStats.textureCount} · 动画{' '}
-                    {viewportStats.animations}
-                  </p>
-                </div>
-              ) : null}
+              )}
             </div>
           ) : null}
         </div>

@@ -1,5 +1,5 @@
 import React, { useCallback, useLayoutEffect, useRef } from 'react'
-import { LayoutGrid, List, X, Box } from 'lucide-react'
+import { LayoutGrid, List, X, Box, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import clsx from 'clsx'
 
 export interface Model3dFile {
@@ -26,6 +26,8 @@ interface ThreeStripProps {
   previewPath: string | null
   onPreviewPath: (path: string) => void
   onRemoveModel: (path: string) => void
+  collapsed: boolean
+  onToggleCollapsed: () => void
 }
 
 function statusLabel(status: Model3dFile['status']): string {
@@ -51,6 +53,8 @@ export function ThreeStrip({
   previewPath,
   onPreviewPath,
   onRemoveModel,
+  collapsed,
+  onToggleCollapsed,
 }: ThreeStripProps) {
   const selectAllRef = useRef<HTMLInputElement>(null)
 
@@ -70,6 +74,27 @@ export function ThreeStrip({
     [onSelectAll, onClearSelection],
   )
 
+  if (collapsed) {
+    return (
+      <div className="flex h-full min-h-0 w-10 shrink-0 flex-col border-r border-[#2d2d2d] bg-[#181818]">
+        <div className="flex h-12 shrink-0 items-center justify-center border-b border-[#2d2d2d]">
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-[#252525] hover:text-gray-200"
+            title="展开队列"
+            aria-label="展开队列"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center px-1">
+          <span className="text-[10px] text-gray-600">{models.length}</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full min-h-0 w-[11.5rem] shrink-0 flex-col border-r border-[#2d2d2d] bg-[#181818]">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[#2d2d2d] px-2">
@@ -88,6 +113,15 @@ export function ThreeStrip({
           <span className="hidden sm:inline">全选</span>
         </label>
         <div className="ml-auto flex rounded-md border border-[#2d2d2d] bg-[#121212] p-0.5">
+          <button
+            type="button"
+            aria-label="收起队列"
+            title="收起队列"
+            onClick={onToggleCollapsed}
+            className="rounded p-1.5 text-gray-500 transition-colors hover:text-gray-300"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
           <button
             type="button"
             aria-label="缩略图列表"

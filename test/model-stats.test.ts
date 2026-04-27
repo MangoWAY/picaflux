@@ -10,6 +10,7 @@ describe('computeModelStats', () => {
     const s = computeModelStats(scene, [])
     expect(s.meshes).toBe(1)
     expect(s.triangles).toBe(12)
+    expect(s.vertices).toBe(24)
     expect(s.materialCount).toBe(1)
   })
 

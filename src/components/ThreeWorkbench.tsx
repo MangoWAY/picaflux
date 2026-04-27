@@ -29,6 +29,7 @@ async function buildModelEntries(paths: string[]): Promise<Model3dFile[]> {
 
 export function ThreeWorkbench() {
   const [models, setModels] = useState<Model3dFile[]>([])
+  const [stripCollapsed, setStripCollapsed] = useState(false)
   const [stripListMode, setStripListMode] = useState<ThreeStripListMode>('thumbnail')
   const [checkedPaths, setCheckedPaths] = useState<Set<string>>(() => new Set())
   const [previewPath, setPreviewPath] = useState<string | null>(null)
@@ -288,6 +289,8 @@ export function ThreeWorkbench() {
         previewPath={previewPath}
         onPreviewPath={setPreviewPath}
         onRemoveModel={handleRemoveModel}
+        collapsed={stripCollapsed}
+        onToggleCollapsed={() => setStripCollapsed((v) => !v)}
       />
       <ThreePreviewPane
         ref={previewRef}
