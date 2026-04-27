@@ -289,7 +289,7 @@ export function VideoSettingsPanel({
                         {m.id === 'transcode' ? (
                           <div className="space-y-2">
                             <div>
-                              <label className={LABEL}>压缩质量</label>
+                              <label className={LABEL}>画质档位</label>
                               <select
                                 value={state.transcodeQualityTier}
                                 onChange={(e) =>
@@ -301,11 +301,15 @@ export function VideoSettingsPanel({
                                 disabled={isProcessing}
                                 className={FIELD}
                               >
-                                <option value="low">低（CRF {TRANSCODE_TIER_CRF.low}）</option>
-                                <option value="medium">
-                                  中（CRF {TRANSCODE_TIER_CRF.medium}）
+                                <option value="low">
+                                  体积优先（CRF {TRANSCODE_TIER_CRF.low}）
                                 </option>
-                                <option value="high">高（CRF {TRANSCODE_TIER_CRF.high}）</option>
+                                <option value="medium">
+                                  平衡模式（CRF {TRANSCODE_TIER_CRF.medium}）
+                                </option>
+                                <option value="high">
+                                  高质量（CRF {TRANSCODE_TIER_CRF.high}）
+                                </option>
                                 <option value="custom">自定义</option>
                               </select>
                             </div>

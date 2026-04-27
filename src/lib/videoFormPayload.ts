@@ -13,7 +13,7 @@ export type VideoRotationUi = '0' | '90' | '180' | '270'
 
 export type VideoFlipUi = 'none' | 'horizontal' | 'vertical' | 'both'
 
-/** 压缩质量：低 / 中 / 高 / 自定义 CRF */
+/** 转码画质档位（UI：体积优先 / 平衡 / 高质量 / 自定义 CRF） */
 export type TranscodeQualityTier = 'low' | 'medium' | 'high' | 'custom'
 
 /** 各档位对应 libx264 CRF（数值越大体积越小） */
