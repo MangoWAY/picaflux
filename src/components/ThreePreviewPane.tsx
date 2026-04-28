@@ -418,7 +418,7 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
     const [showGroundGrid, setShowGroundGrid] = useState(true)
     const [viewportModelSelected, setViewportModelSelected] = useState(false)
     const [renderStyle, setRenderStyle] = useState<RenderStyle>('standard')
-    const [infoCollapsed, setInfoCollapsed] = useState(false)
+    const [infoCollapsed, setInfoCollapsed] = useState(true)
     const [textureInfos, setTextureInfos] = useState<TexturePreviewInfo[]>([])
     const captureFnRef = useRef<(() => string | null) | null>(null)
 
@@ -608,29 +608,31 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
                 )}
               </button>
               {infoCollapsed ? null : (
-                <div className="space-y-2 px-4 pb-3 text-xs text-gray-400">
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1.5">
+                <div className="max-h-[38vh] space-y-1.5 overflow-y-auto px-3 pb-2 text-[11px] text-gray-400">
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1">
                       <span className="text-[10px] text-gray-600">文件大小</span>
-                      <p className="mt-0.5 text-gray-200">{formatSize(previewModel.size)}</p>
+                      <p className="mt-0.5 leading-tight text-gray-200">
+                        {formatSize(previewModel.size)}
+                      </p>
                     </div>
-                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1.5">
+                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1">
                       <span className="text-[10px] text-gray-600">网格 / 材质</span>
-                      <p className="mt-0.5 text-gray-200">
+                      <p className="mt-0.5 leading-tight text-gray-200">
                         {viewportStats?.meshes ?? previewModel.meshCount ?? 0} /{' '}
                         {viewportStats?.materialCount ?? previewModel.materialCount ?? 0}
                       </p>
                     </div>
-                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1.5">
+                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1">
                       <span className="text-[10px] text-gray-600">贴图 / 动画</span>
-                      <p className="mt-0.5 text-gray-200">
+                      <p className="mt-0.5 leading-tight text-gray-200">
                         {viewportStats?.textureCount ?? previewModel.textureCount ?? 0} /{' '}
                         {viewportStats?.animations ?? previewModel.animationCount ?? 0}
                       </p>
                     </div>
-                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1.5">
+                    <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1">
                       <span className="text-[10px] text-gray-600">顶点 / 三角面</span>
-                      <p className="mt-0.5 text-gray-200">
+                      <p className="mt-0.5 leading-tight text-gray-200">
                         {viewportStats?.vertices?.toLocaleString() ?? '—'} /{' '}
                         {viewportStats?.triangles?.toLocaleString() ?? '—'}
                       </p>
@@ -638,28 +640,21 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
                   </div>
 
                   <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-1.5">
-                    <span className="text-[10px] text-gray-600">文件名</span>
-                    <p className="mt-0.5 truncate text-gray-200" title={previewModel.path}>
-                      {previewModel.name}
-                    </p>
-                  </div>
-
-                  <div className="rounded-md border border-[#2d2d2d] bg-[#121212] px-2 py-2">
-                    <div className="mb-1.5 flex items-center justify-between">
+                    <div className="mb-1 flex items-center justify-between">
                       <span className="text-[10px] text-gray-600">纹理预览</span>
                       <span className="text-[10px] text-gray-500">{textureInfos.length} 张</span>
                     </div>
                     {textureInfos.length === 0 ? (
                       <p className="text-[11px] text-gray-500">未检测到可预览纹理</p>
                     ) : (
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-6">
                         {textureInfos.map((tex) => (
                           <div
                             key={tex.key}
                             className="overflow-hidden rounded border border-[#2d2d2d] bg-[#0f0f0f]"
                             title={`${tex.label} · ${tex.width}x${tex.height}`}
                           >
-                            <div className="flex aspect-square items-center justify-center bg-[#0b0b0b]">
+                            <div className="flex h-14 items-center justify-center bg-[#0b0b0b] sm:h-16">
                               {tex.previewUrl ? (
                                 <img
                                   src={tex.previewUrl}
@@ -667,12 +662,12 @@ export const ThreePreviewPane = forwardRef<ThreePreviewPaneHandle, ThreePreviewP
                                   className="h-full w-full object-contain"
                                 />
                               ) : (
-                                <Box className="h-6 w-6 text-gray-600" />
+                                <Box className="h-5 w-5 text-gray-600" />
                               )}
                             </div>
-                            <div className="px-1.5 py-1">
-                              <p className="truncate text-[10px] text-gray-400">{tex.label}</p>
-                              <p className="text-[10px] text-gray-500">
+                            <div className="px-1 py-0.5">
+                              <p className="truncate text-[9px] text-gray-400">{tex.label}</p>
+                              <p className="text-[9px] text-gray-500">
                                 {tex.width} x {tex.height}
                               </p>
                             </div>
